@@ -123,7 +123,7 @@ function ChatPage() {
               if (data === '[DONE]') continue
               try {
                 const parsed = JSON.parse(data)
-                const content = parsed.content || parsed.delta || ''
+                const content = parsed.answer || parsed.content || parsed.delta || ''
                 fullContent += content
                 /* 逐步更新AI消息内容 */
                 setMessages((prev) =>

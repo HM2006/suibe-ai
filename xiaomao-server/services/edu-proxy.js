@@ -431,6 +431,8 @@ class EduProxy {
     const time = slotMatch ? `${slotMatch[1]}-${slotMatch[2]}节` : `${periodNum}-${periodNum}节`;
     /* slot使用解析出的起始节次（0-based），而非当前行号 */
     const startSlot = slotMatch ? parseInt(slotMatch[1]) - 1 : periodNum - 1;
+    /* endSlot使用解析出的结束节次（0-based），用于前端跨行显示 */
+    const endSlot = slotMatch ? parseInt(slotMatch[2]) - 1 : periodNum - 1;
 
     /* 提取教室（"松江 SA201" 格式） */
     const locationMatch = text.match(/(松江|长宁|浦东)\s+(\S+)/);
@@ -458,6 +460,7 @@ class EduProxy {
       location,
       time,
       slot: startSlot,
+      endSlot,
       day: dayIndex,
       weeks,
       type,
@@ -576,7 +579,9 @@ class EduProxy {
 
           /* 解析课程名 */
           /* 格式："创新创业拓展 A120310004010  |  必修课  |  创新创业拓展  |" */
-          const courseNameMatch = firstCellText.match(/^(.+?)\s+[A-Z]\d{10,}/);
+          /* 注意：课程代码可能紧跟课程名（无空格），如"创新创业拓展A120310004010" */
+          const courseNameMatch = firstCellText.match(/^(.+?)\s+[A-Z]\d{10,}/)
+            || firstCellText.match(/^(.+?)[A-Z]\d{10,}/);
           const courseName = courseNameMatch ? courseNameMatch[1].trim() : firstCellText.split(/\s+/)[0];
 
           /* 解析课程类型 - 格式："| 必修课 |" 或 "| 选修课 |" */

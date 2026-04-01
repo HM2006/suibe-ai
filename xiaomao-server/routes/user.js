@@ -165,6 +165,7 @@ router.get('/user/profile', authMiddleware, (req, res) => {
         id: user.id,
         username: user.username,
         nickname: user.nickname,
+        avatar: user.avatar || '',
         role: user.role,
         created_at: user.created_at,
         last_login: user.last_login,
@@ -223,6 +224,34 @@ router.put('/user/profile', authMiddleware, (req, res) => {
         nickname: user.nickname,
         role: user.role,
       },
+    },
+  });
+});
+
+// ==================== 更新头像 ====================
+
+/**
+ * PUT /api/user/avatar - 更新用户头像（需认证）
+ * body: { avatar } - emoji 字符串
+ */
+router.put('/user/avatar', authMiddleware, (req, res) => {
+  const userId = req.user.userId;
+  const { avatar } = req.body;
+
+  if (!avatar || typeof avatar !== 'string' || avatar.length > 10) {
+    return res.status(400).json({
+      success: false,
+      message: '头像格式无效',
+    });
+  }
+
+  db.updateUserAvatar(userId, avatar);
+
+  const user = db.getUserById(userId);
+  res.json({
+    success: true,
+    data: {
+      avatar: user.avatar,
     },
   });
 });

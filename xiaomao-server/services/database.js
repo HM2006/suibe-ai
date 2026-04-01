@@ -40,6 +40,7 @@ function init() {
       username TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
       nickname TEXT DEFAULT '',
+      avatar TEXT DEFAULT '',
       role TEXT DEFAULT 'user',
       created_at TEXT DEFAULT (datetime('now', 'localtime')),
       last_login TEXT,
@@ -267,6 +268,17 @@ function updateUserNickname(userId, nickname) {
 }
 
 /**
+ * 更新用户头像
+ * @param {number} userId
+ * @param {string} avatar - 头像标识（emoji或预设头像名）
+ */
+function updateUserAvatar(userId, avatar) {
+  const stmt = db.prepare('UPDATE users SET avatar = ? WHERE id = ?');
+  stmt.run(avatar, userId);
+  return getUserById(userId);
+}
+
+/**
  * 更新用户密码
  * @param {number} userId
  * @param {string} newPassword - 新的明文密码
@@ -303,6 +315,7 @@ module.exports = {
   getAllUsers,
   getUserStats,
   updateUserNickname,
+  updateUserAvatar,
   updateUserPassword,
   deleteUser,
 };

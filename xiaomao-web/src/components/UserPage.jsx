@@ -5,7 +5,7 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
-import { User, LogIn, LogOut, Settings, ChevronRight, Shield, Calendar, BarChart3, KeyRound, ArrowLeft, Link2, Unplug, Loader, CheckCircle } from 'lucide-react'
+import { User, LogIn, LogOut, Settings, ChevronRight, Shield, Calendar, BarChart3, KeyRound, ArrowLeft, Link2, Unplug, Loader, CheckCircle, Camera } from 'lucide-react'
 import EduLoginModal from './EduLoginModal'
 
 /* API基础路径 */
@@ -323,6 +323,31 @@ function UserProfile() {
   const [showEduLoginModal, setShowEduLoginModal] = useState(false)
   const [eduSyncing, setEduSyncing] = useState(false)
   const [eduSyncStatus, setEduSyncStatus] = useState('') // 'success' | 'error' | ''
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false)
+
+  /* 预设头像列表 */
+  const avatarOptions = ['😎', '🐱', '🐶', '🦊', '🐼', '🐨', '🦁', '🐯', '🐸', '🤖', '👽', '🎃', '🌟', '🎯', '🎨', '📚', '🔥', '❄️', '🌸', '🍀']
+
+  /* 更新头像 */
+  const handleAvatarChange = async (emoji) => {
+    try {
+      const res = await fetch(`${API_BASE}/avatar`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ avatar: emoji }),
+      })
+      const data = await res.json()
+      if (data.success) {
+        await refreshProfile()
+        setShowAvatarPicker(false)
+      }
+    } catch (err) {
+      console.warn('[UserPage] 更新头像失败:', err)
+    }
+  }
 
   /* 教务系统登录成功后自动获取课表和成绩 */
   const handleEduLoginSuccess = useCallback(async () => {
@@ -407,12 +432,95 @@ function UserProfile() {
 
   const displayName = user.nickname || user.username
   const initial = displayName[0].toUpperCase()
+  const avatarDisplay = user.avatar || initial
 
   return (
     <div className="user-page">
       {/* 用户信息卡片 */}
       <div className="user-info-card">
-        <div className="user-avatar">{initial}</div>
+        <div
+          className="user-avatar"
+          style={{ cursor: 'pointer', position: 'relative', fontSize: user.avatar ? '32px' : undefined }}
+          onClick={() => setShowAvatarPicker(true)}
+          title="点击更换头像"
+        >
+          {avatarDisplay}
+          <div style={{
+            position: 'absolute',
+            bottom: '-2px',
+            right: '-2px',
+            width: '18px',
+            height: '18px',
+            borderRadius: '50%',
+            background: 'var(--primary)',
+            color: '#fff',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '2px solid var(--card-bg)',
+          }}>
+            <Camera size={10} />
+          </div>
+        </div>
+
+        {/* 头像选择器 */}
+        {showAvatarPicker && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.4)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+          }} onClick={() => setShowAvatarPicker(false)}>
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'var(--card-bg)',
+                borderRadius: '16px',
+                padding: '20px',
+                maxWidth: '320px',
+                width: '90%',
+                boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+              }}
+            >
+              <div style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', textAlign: 'center' }}>
+                选择头像
+              </div>
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(5, 1fr)',
+                gap: '8px',
+              }}>
+                {avatarOptions.map((emoji) => (
+                  <div
+                    key={emoji}
+                    onClick={() => handleAvatarChange(emoji)}
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '12px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '24px',
+                      cursor: 'pointer',
+                      background: user.avatar === emoji ? '#EEF2FF' : 'var(--bg-secondary)',
+                      border: user.avatar === emoji ? '2px solid var(--primary)' : '2px solid transparent',
+                      transition: 'all 0.15s',
+                    }}
+                  >
+                    {emoji}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
         <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
           {displayName}
         </div>
@@ -581,6 +689,20 @@ function UserPage() {
       ) : (
         <LoginForm onSwitchToRegister={() => setShowRegister(true)} />
       )}
+      {/* 管理员入口 */}
+      <div
+        onClick={() => navigate('/admin')}
+        style={{
+          textAlign: 'center',
+          marginTop: '32px',
+          fontSize: '12px',
+          color: 'var(--text-muted)',
+          cursor: 'pointer',
+          opacity: 0.6,
+        }}
+      >
+        管理员入口
+      </div>
     </div>
   )
 }

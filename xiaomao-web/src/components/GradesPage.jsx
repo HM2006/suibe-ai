@@ -84,14 +84,17 @@ function transformRealGrades(realData) {
     id: index + 1,
     course: item.courseName,
     credit: item.credit,
-    /* 优先使用数字分数，如果是等级文字则用 scoreNum */
-    score: typeof item.score === 'number' ? item.score : (item.scoreNum || item.score),
+    /* score 保持原始值：数字分数直接用，等级文字（合格等）也直接显示 */
+    score: item.score,
+    /* scoreNum 始终是数字，仅用于 GPA 计算和排序，不用于显示 */
     scoreNum: item.scoreNum || (typeof item.score === 'number' ? item.score : 0),
     grade: item.grade || '',
     semester: item.semester,
     type: item.type || '必修',
     gpaPoint: item.gpaPoint || 0,
     finalScore: item.finalScore,
+    /* 标记是否为等级文字成绩 */
+    isLevelText: typeof item.score === 'string',
   }))
 }
 
@@ -276,22 +279,26 @@ function GradesPage() {
 
         {/* 成绩行 */}
         {filteredGrades.map((grade) => {
-          const score = typeof grade.score === 'number' ? grade.score : (grade.scoreNum || 0)
+          const numScore = grade.scoreNum || 0
           return (
             <div key={grade.id} className="grade-row">
               <div style={{ fontWeight: 500 }}>{grade.course}</div>
               <div>{grade.credit}</div>
               <div className="grade-credit" style={{ fontWeight: 600 }}>
-                {typeof grade.score === 'number' ? grade.score : grade.score}
+                {grade.isLevelText ? grade.score : grade.score}
               </div>
               <div>
-                {grade.gpaPoint > 0 ? (
-                  <span className={`grade-badge ${getGradeBadgeClass(score)}`}>
+                {grade.isLevelText ? (
+                  <span className={`grade-badge ${grade.score === '合格' ? 'pass' : getGradeBadgeClass(numScore)}`}>
+                    {grade.score}
+                  </span>
+                ) : grade.gpaPoint > 0 ? (
+                  <span className={`grade-badge ${getGradeBadgeClass(numScore)}`}>
                     {grade.gpaPoint.toFixed(1)}
                   </span>
                 ) : (
-                  <span className={`grade-badge ${getGradeBadgeClass(score)}`}>
-                    {grade.grade} {getGradeLabel(score)}
+                  <span className={`grade-badge ${getGradeBadgeClass(numScore)}`}>
+                    {grade.grade} {getGradeLabel(numScore)}
                   </span>
                 )}
               </div>

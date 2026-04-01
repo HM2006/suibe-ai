@@ -193,10 +193,37 @@ function SchedulePage() {
   /* 当前使用的课表数据 */
   const scheduleData = realSchedule || mockScheduleData
 
-  /* 获取指定位置的课程 */
+  /* 获取指定位置的课程（考虑跨节次） */
   const getCourse = (day, slot) => {
     const courses = scheduleData[day] || []
-    return courses.find((c) => c.slot === slot) || null
+    return courses.find((c) => {
+      const start = c.slot ?? 0
+      const end = c.endSlot ?? start
+      return slot >= start && slot <= end
+    }) || null
+  }
+
+  /* 判断是否是课程的起始节次（用于决定是否显示课程卡） */
+  const isCourseStart = (day, slot) => {
+    const courses = scheduleData[day] || []
+    const course = courses.find((c) => {
+      const start = c.slot ?? 0
+      const end = c.endSlot ?? start
+      return slot >= start && slot <= end
+    })
+    return course && (course.slot ?? 0) === slot
+  }
+
+  /* 获取课程的跨行数 */
+  const getCourseSpan = (day, slot) => {
+    const courses = scheduleData[day] || []
+    const course = courses.find((c) => {
+      const start = c.slot ?? 0
+      const end = c.endSlot ?? start
+      return slot >= start && slot <= end
+    })
+    if (!course) return 1
+    return (course.endSlot ?? course.slot ?? slot) - (course.slot ?? slot) + 1
   }
 
   /* 判断是否为当前时间 */
@@ -283,12 +310,21 @@ function SchedulePage() {
               {[0, 1, 2, 3, 4].map((dayIndex) => {
                 const course = getCourse(dayIndex, slotIndex)
                 const isCurrent = isCurrentSlot(dayIndex, slotIndex)
+                const isStart = isCourseStart(dayIndex, slotIndex)
+                const span = getCourseSpan(dayIndex, slotIndex)
                 const colorConfig = course
                   ? courseColors[course.color % courseColors.length]
                   : null
 
+                /* 如果不是课程起始节次，跳过（被上面的 rowSpan 覆盖） */
+                if (course && !isStart) return null
+
                 return (
-                  <div key={`${dayIndex}-${slotIndex}`} className="course-cell">
+                  <div
+                    key={`${dayIndex}-${slotIndex}`}
+                    className="course-cell"
+                    style={span > 1 ? { gridRow: `span ${span}` } : undefined}
+                  >
                     {course ? (
                       <div
                         className={`course-card ${isCurrent ? 'current' : ''}`}
@@ -296,6 +332,10 @@ function SchedulePage() {
                           background: colorConfig.bg,
                           color: colorConfig.text,
                           border: `1px solid ${colorConfig.border}`,
+                          height: span > 1 ? '100%' : undefined,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          justifyContent: 'center',
                         }}
                       >
                         <div className="course-name">{course.name}</div>

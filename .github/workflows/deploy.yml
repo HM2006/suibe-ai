@@ -57,6 +57,7 @@ jobs:
             echo ">>> 构建前端..."
             cd ../xiaomao-web
             npm install
+            rm -rf dist
             npm run build
             
             # 复制构建产物到后端静态目录
@@ -74,12 +75,8 @@ jobs:
               npm install -g pm2
             fi
             
-            # 停止旧进程（如果存在）
-            pm2 stop suibe-ai 2>/dev/null || true
-            pm2 delete suibe-ai 2>/dev/null || true
-            
-            # 启动新进程
-            pm2 start server.js --name suibe-ai
+            # 重启或启动服务
+            pm2 restart suibe-ai 2>/dev/null || pm2 start server.js --name suibe-ai
             pm2 save
             
             echo "=== 部署完成 ==="

@@ -162,8 +162,8 @@ function GradesPage() {
     const totalCredits = filteredGrades.reduce((sum, g) => sum + g.credit, 0)
     const validScores = scores.filter(s => typeof s === 'number' && s > 0)
     const avgScore = validScores.length > 0
-      ? (validScores.reduce((a, b) => a + b, 0) / validScores.length).toFixed(1)
-      : 0
+      ? (validScores.reduce((a, b) => a + b, 0) / validScores.length).toFixed(2)
+      : '0.00'
     const maxScore = validScores.length > 0 ? Math.max(...validScores) : 0
 
     /* 如果是真实数据且显示全部学期，使用后端返回的GPA */

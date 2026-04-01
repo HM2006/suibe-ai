@@ -48,6 +48,18 @@ function init() {
     );
   `);
 
+  // 自动补齐旧表缺失的列（ALTER TABLE ADD COLUMN 如果列已存在会报错，需要忽略）
+  const migrateColumns = [
+    { table: 'users', column: 'avatar TEXT DEFAULT \'\'' },
+  ];
+  for (const { table, column } of migrateColumns) {
+    try {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column}`);
+    } catch (e) {
+      // 列已存在，忽略
+    }
+  }
+
   // 创建课表缓存表
   db.exec(`
     CREATE TABLE IF NOT EXISTS schedule_cache (

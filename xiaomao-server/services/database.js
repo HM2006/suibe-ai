@@ -60,6 +60,20 @@ function init() {
     }
   }
 
+  // 创建默认管理员账号（如果不存在）
+  const adminExists = db.prepare("SELECT id FROM users WHERE role = 'admin'").get();
+  if (!adminExists) {
+    const bcrypt = require('bcryptjs');
+    const hashedPassword = bcrypt.hashSync('admin123', 10);
+    try {
+      db.prepare("INSERT INTO users (username, password, nickname, role) VALUES ('admin', ?, '管理员', 'admin')")
+        .run(hashedPassword);
+      console.log('[DB] 已创建默认管理员账号: admin / admin123');
+    } catch (e) {
+      console.warn('[DB] 创建默认管理员失败（用户名可能已存在）:', e.message);
+    }
+  }
+
   // 创建课表缓存表
   db.exec(`
     CREATE TABLE IF NOT EXISTS schedule_cache (

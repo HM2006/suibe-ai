@@ -117,6 +117,13 @@ app.use('/api', eduRoutes);
 app.use('/api', userRoutes);
 app.use('/api', adminRoutes);
 
+// ==================== SPA 路由回退 ====================
+// 所有非 API 的 GET 请求都返回 index.html，让 React Router 处理前端路由
+app.get('*', (req, res, next) => {
+  if (req.path.startsWith('/api')) return next();
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
+
 // ==================== 错误处理 ====================
 
 // 404未找到处理（放在所有路由之后）

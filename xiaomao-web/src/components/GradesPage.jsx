@@ -148,12 +148,13 @@ function GradesPage() {
   }, [token])
 
   /* 当前使用的成绩数据 */
-  const gradesData = realGrades
+  const gradesData = realGrades || []
   /* 当前使用的学期列表 */
   const semesters = realGrades ? extractSemesters(realGrades) : []
 
   /* 根据学期筛选成绩 */
   const filteredGrades = useMemo(() => {
+    if (!gradesData || gradesData.length === 0) return []
     if (selectedSemester === '全部') return gradesData
     return gradesData.filter((g) => g.semester === selectedSemester)
   }, [selectedSemester, gradesData])

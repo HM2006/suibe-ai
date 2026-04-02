@@ -193,7 +193,7 @@ function SchedulePage() {
   }, [])
 
   /* 当前使用的课表数据 */
-  const scheduleData = realSchedule
+  const scheduleData = realSchedule || {}
 
   /* 获取指定位置的课程（考虑跨节次） */
   const getCourse = (day, slot) => {

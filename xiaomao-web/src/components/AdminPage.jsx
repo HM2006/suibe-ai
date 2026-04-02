@@ -129,7 +129,8 @@ function UserStatsPanel({ userId, username, onBack }) {
       )}
 
       {stats && !loading && (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          {/* 课表缓存 */}
           <div style={{
             padding: '16px', background: 'var(--card-bg)',
             border: '1px solid var(--card-border)', borderRadius: '12px',
@@ -138,12 +139,23 @@ function UserStatsPanel({ userId, username, onBack }) {
               <Calendar size={16} style={{ color: 'var(--primary)' }} />
               <span style={{ fontSize: '14px', fontWeight: 600 }}>课表缓存</span>
             </div>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <div>状态：{stats.scheduleCached ? '✅ 已缓存' : '❌ 未缓存'}</div>
-              {stats.scheduleCachedAt && <div>时间：{formatDateTime(stats.scheduleCachedAt)}</div>}
-              {stats.scheduleCourseCount !== undefined && <div>课程：{stats.scheduleCourseCount} 门</div>}
-            </div>
+            {stats.scheduleCache ? (
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div>状态：✅ 已缓存</div>
+                <div>更新时间：{formatDateTime(stats.scheduleCache.updated_at)}</div>
+                {stats.scheduleCache.data && Array.isArray(stats.scheduleCache.data) && (
+                  <div>课程数量：{stats.scheduleCache.data.length} 门</div>
+                )}
+                {stats.scheduleCache.data && typeof stats.scheduleCache.data === 'object' && !Array.isArray(stats.scheduleCache.data) && stats.scheduleCache.data.schedule && (
+                  <div>课程数量：{stats.scheduleCache.data.schedule.length} 门</div>
+                )}
+              </div>
+            ) : (
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>❌ 未缓存课表数据</div>
+            )}
           </div>
+
+          {/* 成绩缓存 */}
           <div style={{
             padding: '16px', background: 'var(--card-bg)',
             border: '1px solid var(--card-border)', borderRadius: '12px',
@@ -152,12 +164,20 @@ function UserStatsPanel({ userId, username, onBack }) {
               <BookOpen size={16} style={{ color: '#10B981' }} />
               <span style={{ fontSize: '14px', fontWeight: 600 }}>成绩缓存</span>
             </div>
-            <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
-              <div>状态：{stats.gradesCached ? '✅ 已缓存' : '❌ 未缓存'}</div>
-              {stats.gradesCachedAt && <div>时间：{formatDateTime(stats.gradesCachedAt)}</div>}
-              {stats.gradesCount !== undefined && <div>记录：{stats.gradesCount} 条</div>}
-              {stats.gradesGPA !== undefined && <div>GPA：{stats.gradesGPA}</div>}
-            </div>
+            {stats.gradesCache ? (
+              <div style={{ fontSize: '13px', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                <div>状态：✅ 已缓存</div>
+                <div>更新时间：{formatDateTime(stats.gradesCache.updated_at)}</div>
+                {stats.gradesCache.gpa && <div>GPA：{stats.gradesCache.gpa}</div>}
+                {stats.gradesCache.total_credits && <div>总学分：{stats.gradesCache.total_credits}</div>}
+                {stats.gradesCache.data && (() => {
+                  const grades = Array.isArray(stats.gradesCache.data) ? stats.gradesCache.data : (stats.gradesCache.data.grades || [])
+                  return <div>成绩记录：{grades.length} 条</div>
+                })()}
+              </div>
+            ) : (
+              <div style={{ fontSize: '13px', color: 'var(--text-muted)' }}>❌ 未缓存成绩数据</div>
+            )}
           </div>
         </div>
       )}

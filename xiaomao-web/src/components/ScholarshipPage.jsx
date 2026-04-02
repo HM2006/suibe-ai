@@ -82,9 +82,8 @@ function findAllCoursesByName(grades, keyword) {
   return grades.filter((g) => g.course.includes(keyword))
 }
 
-/* PDF文本解析 - 提取各类别积分 */
+/* PDF文本解析 - 提取各类别积分（正则全局匹配，不依赖行分割） */
 function parsePdfText(text) {
-  const lines = text.split('\n').map((l) => l.trim()).filter(Boolean)
   const result = {
     social: 0,
     volunteer: 0,
@@ -102,36 +101,45 @@ function parsePdfText(text) {
     '劳动实践': 'labor',
   }
 
-  let currentCategory = null
+  /* 将整个文本按分类标题切割成区块 */
+  const categoryNames = Object.keys(categoryMap)
+  const regex = new RegExp(`(${categoryNames.join('|')})\\s*总分[：:]?\\s*[\\d.]+分?`, 'g')
+  const splitPoints = []
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    const catName = categoryNames.find(n => match[0].includes(n))
+    splitPoints.push({ index: match.index, category: categoryMap[catName] })
+  }
 
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i]
+  /* 对每个分类区块，提取目标学期的积分 */
+  for (let i = 0; i < splitPoints.length; i++) {
+    const start = splitPoints[i].index
+    const end = i + 1 < splitPoints.length ? splitPoints[i + 1].index : text.length
+    const block = text.substring(start, end)
+    const catKey = splitPoints[i].category
 
-    /* 检查是否是分类标题行 */
-    let matchedCategory = null
-    for (const [keyword, key] of Object.entries(categoryMap)) {
-      if (line.includes(keyword) && line.includes('总分')) {
-        matchedCategory = key
-        currentCategory = key
-        break
+    /* 在区块中查找所有目标学期的记录，提取积分值 */
+    /* PDF文本中 "2025-2026学年第一学期" 可能被空格拆开，用宽松匹配 */
+    const semPattern = '2025\\s*[-–—]\\s*2026\\s*学年\\s*第\\s*一\\s*学期'
+    const recordRegex = new RegExp(`${semPattern}[\\s\\S]*?(\\d+\\.?\\d*)\\s*$`, 'gm')
+    let recordMatch
+    while ((recordMatch = recordRegex.exec(block)) !== null) {
+      const points = parseFloat(recordMatch[1])
+      if (!isNaN(points) && points > 0) {
+        result[catKey] += points
       }
     }
 
-    if (matchedCategory) continue
-
-    /* 如果当前在某个分类下，检查是否是目标学期的记录 */
-    if (currentCategory && line.includes(TARGET_SEMESTER_LABEL)) {
-      /* 提取行末的数字作为积分值 */
-      const parts = line.split(/\s+/)
-      let points = 0
-      for (let j = parts.length - 1; j >= 0; j--) {
-        const num = parseFloat(parts[j])
-        if (!isNaN(num) && num > 0) {
-          points = num
-          break
+    /* 备用方案：如果上面的正则没匹配到，尝试更宽松的方式 */
+    if (result[catKey] === 0) {
+      /* 按 "2025-2026学年第一学期" 后面跟着的内容找数字 */
+      const looseRegex = new RegExp(`${semPattern}[\\s\\S]*?(\\d+\\.?\\d*)`, 'g')
+      while ((recordMatch = looseRegex.exec(block)) !== null) {
+        const points = parseFloat(recordMatch[1])
+        if (!isNaN(points) && points > 0 && points < 100) {
+          result[catKey] += points
         }
       }
-      result[currentCategory] += points
     }
   }
 
@@ -206,6 +214,13 @@ function ScholarshipPage() {
     volunteer: 0,
     innovation: 0,
     culture: 0,
+  })
+  /* 手动输入积分（用于校验和手动覆盖） */
+  const [practiceManual, setPracticeManual] = useState({
+    social: '',
+    volunteer: '',
+    innovation: '',
+    culture: '',
   })
 
   /* Step 5: 劳动教育 */
@@ -309,6 +324,12 @@ function ScholarshipPage() {
         innovation: parsed.innovation,
         culture: parsed.culture,
       })
+      setPracticeManual({
+        social: parsed.social > 0 ? String(parsed.social) : '',
+        volunteer: parsed.volunteer > 0 ? String(parsed.volunteer) : '',
+        innovation: parsed.innovation > 0 ? String(parsed.innovation) : '',
+        culture: parsed.culture > 0 ? String(parsed.culture) : '',
+      })
       setLaborPoints(parsed.labor)
       if (parsed.labor > 0) {
         setLaborManualInput(String(parsed.labor))
@@ -323,9 +344,10 @@ function ScholarshipPage() {
   /* 计算德育总分 */
   const moralTotal = moralPolicyScore * 0.5 + moralDemocracyScore * 0.3 + moralActivityScore * 0.2
 
-  /* 计算实践创新各项得分 */
+  /* 计算实践创新各项得分（手动输入优先） */
   const practiceDetail = PRACTICE_CATEGORIES.map((cat) => {
-    const points = practiceScores[cat.key] || 0
+    const manualVal = parseFloat(practiceManual[cat.key])
+    const points = !isNaN(manualVal) ? manualVal : (practiceScores[cat.key] || 0)
     const cappedPoints = Math.min(points, cat.maxPoints)
     const score = cappedPoints * 2
     return { ...cat, points, cappedPoints, score }
@@ -919,31 +941,77 @@ function ScholarshipPage() {
           <h4 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', color: 'var(--text-primary)' }}>
             积分明细（{TARGET_SEMESTER_LABEL}）
           </h4>
-          {practiceDetail.map((item) => (
-            <div key={item.key} style={{
-              background: 'var(--bg-secondary)',
-              borderRadius: 'var(--radius-md)',
-              padding: '12px 16px',
-              marginBottom: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}>
-              <div>
-                <span style={{ fontSize: '14px', fontWeight: 500 }}>{item.label}</span>
-                <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
-                  {item.points.toFixed(2)} 积分（上限{item.maxPoints}）
-                </span>
-              </div>
-              <span style={{
-                fontSize: '16px',
-                fontWeight: 700,
-                color: item.cappedPoints >= item.maxPoints ? 'var(--success)' : 'var(--primary)',
+          {practiceDetail.map((item) => {
+            const manualVal = parseFloat(practiceManual[item.key])
+            const hasManual = practiceManual[item.key] !== ''
+            const isInvalid = hasManual && (isNaN(manualVal) || manualVal < 0 || manualVal > item.maxPoints)
+            return (
+              <div key={item.key} style={{
+                background: 'var(--bg-secondary)',
+                borderRadius: 'var(--radius-md)',
+                padding: '12px 16px',
+                marginBottom: '8px',
               }}>
-                {item.score} 分
-              </span>
-            </div>
-          ))}
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: hasManual ? '8px' : '0',
+                }}>
+                  <div>
+                    <span style={{ fontSize: '14px', fontWeight: 500 }}>{item.label}</span>
+                    <span style={{ fontSize: '12px', color: 'var(--text-muted)', marginLeft: '8px' }}>
+                      上限 {item.maxPoints} 积分
+                    </span>
+                  </div>
+                  <span style={{
+                    fontSize: '16px',
+                    fontWeight: 700,
+                    color: item.cappedPoints >= item.maxPoints ? 'var(--success)' : 'var(--primary)',
+                  }}>
+                    {item.score} 分
+                  </span>
+                </div>
+                {/* 手动输入框 */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <label style={{ fontSize: '12px', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                    手动输入积分：
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    max={item.maxPoints}
+                    step="0.01"
+                    value={practiceManual[item.key]}
+                    onChange={(e) => {
+                      const val = e.target.value
+                      setPracticeManual(prev => ({ ...prev, [item.key]: val }))
+                      const num = parseFloat(val)
+                      if (!isNaN(num) && num >= 0) {
+                        setPracticeScores(prev => ({ ...prev, [item.key]: num }))
+                      }
+                    }}
+                    placeholder={`0 - ${item.maxPoints}`}
+                    style={{
+                      width: '100px',
+                      padding: '6px 10px',
+                      border: `1.5px solid ${isInvalid ? '#EF4444' : 'var(--card-border)'}`,
+                      borderRadius: 'var(--radius-sm)',
+                      fontSize: '13px',
+                      background: isInvalid ? '#FEF2F2' : 'var(--card-bg)',
+                      color: 'var(--text-primary)',
+                      outline: 'none',
+                    }}
+                  />
+                  {isInvalid && (
+                    <span style={{ fontSize: '11px', color: '#EF4444', whiteSpace: 'nowrap' }}>
+                      积分应在 0-{item.maxPoints} 之间
+                    </span>
+                  )}
+                </div>
+              </div>
+            )
+          })}
 
           <div style={{
             background: 'var(--primary-bg)',

@@ -333,8 +333,28 @@ router.get('/campus/news', asyncHandler(async (req, res) => {
  */
 router.get('/campus/news/:id', asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const newsItem = news.find(n => n.id === id);
 
+  // 先从缓存中查找
+  const cached = newsCrawler.getCachedNews().find(n => n.id === id);
+  if (cached && cached.url) {
+    try {
+      const detail = await newsCrawler.fetchNewsDetail(cached.url);
+      res.json({
+        success: true,
+        data: {
+          ...cached,
+          content: detail.content || cached.summary || '',
+          author: detail.author || cached.author || '',
+        }
+      });
+      return;
+    } catch (err) {
+      console.error('[Campus/News] 详情抓取失败，返回缓存数据:', err.message);
+    }
+  }
+
+  // fallback: 从mock数据查找
+  const newsItem = news.find(n => n.id === id);
   if (!newsItem) {
     throw new AppError('未找到该新闻', 404, 'NOT_FOUND');
   }

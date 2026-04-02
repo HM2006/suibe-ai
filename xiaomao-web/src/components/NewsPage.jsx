@@ -102,6 +102,8 @@ function NewsPage() {
   const [selectedCategory, setSelectedCategory] = useState('all')
   /* 选中的新闻（用于弹窗） */
   const [selectedNews, setSelectedNews] = useState(null)
+  const [newsDetail, setNewsDetail] = useState(null)
+  const [detailLoading, setDetailLoading] = useState(false)
   /* 新闻列表 */
   const [newsList, setNewsList] = useState(null)
   /* 加载状态 */
@@ -157,15 +159,33 @@ function NewsPage() {
     return displayNews.filter((news) => news.category === selectedCategory)
   }, [selectedCategory, displayNews])
 
-  /* 处理新闻卡片点击 */
-  const handleNewsClick = (news) => {
-    /* 如果有外部链接，打开新窗口 */
-    if (news.url) {
-      window.open(news.url, '_blank', 'noopener,noreferrer')
-    } else {
-      /* 否则显示弹窗 */
-      setSelectedNews(news)
+  /* 处理新闻卡片点击 - 弹窗显示详情 */
+  const handleNewsClick = async (news) => {
+    setSelectedNews(news)
+    setNewsDetail(null)
+    setDetailLoading(true)
+
+    // 尝试从API获取详情
+    try {
+      const res = await fetch(`${NEWS_API}/${news.id}`)
+      if (res.ok) {
+        const data = await res.json()
+        if (data.success && data.data) {
+          setNewsDetail(data.data)
+        }
+      }
+    } catch (err) {
+      console.warn('获取新闻详情失败:', err)
+    } finally {
+      setDetailLoading(false)
     }
+  }
+
+  /* 关闭弹窗 */
+  const closeNewsModal = () => {
+    setSelectedNews(null)
+    setNewsDetail(null)
+    setDetailLoading(false)
   }
 
   /* 获取分类标签 */
@@ -318,7 +338,7 @@ function NewsPage() {
       {selectedNews && (
         <div
           className="news-modal-overlay"
-          onClick={() => setSelectedNews(null)}
+          onClick={() => closeNewsModal()}
         >
           <div
             className="news-modal"
@@ -328,7 +348,7 @@ function NewsPage() {
             {/* 关闭按钮 */}
             <button
               className="news-modal-close"
-              onClick={() => setSelectedNews(null)}
+              onClick={() => closeNewsModal()}
             >
               <X size={18} />
             </button>
@@ -355,11 +375,76 @@ function NewsPage() {
 
             {/* 正文内容 */}
             <div className="news-modal-content">
-              {(selectedNews.content || selectedNews.summary || '').split('\n').map((paragraph, index) => (
-                <p key={index} style={{ marginBottom: paragraph.trim() === '' ? '12px' : '8px' }}>
-                  {paragraph}
-                </p>
-              ))}
+              {detailLoading ? (
+                /* 加载中骨架 */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {[1, 2, 3, 4, 5].map(i => (
+                    <div key={i} style={{
+                      height: '16px',
+                      background: 'var(--bg-secondary)',
+                      borderRadius: '4px',
+                      opacity: 1 - i * 0.15,
+                    }} />
+                  ))}
+                </div>
+              ) : (
+                <>
+                  {/* 显示详情内容（API获取的优先，否则用列表中的summary） */}
+                  {(newsDetail?.content || selectedNews.content || selectedNews.summary || '').split('\n').map((paragraph, index) => (
+                    <p key={index} style={{ marginBottom: paragraph.trim() === '' ? '12px' : '8px', lineHeight: '1.8' }}>
+                      {paragraph}
+                    </p>
+                  ))}
+
+                  {/* 附件提示 */}
+                  {selectedNews.hasAttachment && (
+                    <div style={{
+                      marginTop: '20px',
+                      padding: '12px 16px',
+                      background: 'var(--bg-secondary)',
+                      borderRadius: 'var(--radius-md)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '13px',
+                      color: 'var(--text-muted)',
+                    }}>
+                      <Paperclip size={16} />
+                      <span>本文含附件，如需下载请前往教务处官网查看</span>
+                    </div>
+                  )}
+
+                  {/* 跳转原文链接 */}
+                  {selectedNews.url && (
+                    <div style={{
+                      marginTop: '16px',
+                      paddingTop: '16px',
+                      borderTop: '1px solid var(--card-border)',
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                    }}>
+                      <a
+                        href={selectedNews.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          fontSize: '13px',
+                          color: 'var(--primary)',
+                          textDecoration: 'none',
+                          fontWeight: 500,
+                        }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ExternalLink size={14} />
+                        前往原文查看
+                      </a>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>

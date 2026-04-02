@@ -42,7 +42,7 @@ jobs:
 
             # 生成 .env 文件（从 Secrets 写入，不提交到 Git）
             echo ">>> 生成 .env 文件..."
-            cd xiaomao-server
+            cd "$DEPLOY_DIR/xiaomao-server"
             cat > .env << ENVEOF
             HIAGENT_API_BASE=${{ secrets.HIAGENT_API_BASE }}
             HIAGENT_API_KEY=${{ secrets.HIAGENT_API_KEY }}
@@ -50,24 +50,24 @@ jobs:
 
             # 安装后端依赖
             echo ">>> 安装后端依赖..."
-            cd xiaomao-server
+            cd "$DEPLOY_DIR/xiaomao-server"
             npm install --production
             
             # 安装前端依赖并构建
             echo ">>> 构建前端..."
-            cd ../xiaomao-web
+            cd "$DEPLOY_DIR/xiaomao-web"
             npm install
             rm -rf dist
             npm run build
             
             # 复制构建产物到后端静态目录
             echo ">>> 复制前端构建产物..."
-            rm -rf ../xiaomao-server/public
-            cp -r dist ../xiaomao-server/public
+            rm -rf "$DEPLOY_DIR/xiaomao-server/public"
+            cp -r dist "$DEPLOY_DIR/xiaomao-server/public"
             
             # 使用 PM2 重启后端服务
             echo ">>> 重启服务..."
-            cd ../xiaomao-server
+            cd "$DEPLOY_DIR/xiaomao-server"
             
             # 安装 PM2（如果未安装）
             if ! command -v pm2 &> /dev/null; then

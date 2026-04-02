@@ -5,7 +5,7 @@
 import { useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
-import { User, LogIn, LogOut, Settings, ChevronRight, Shield, Calendar, BarChart3, KeyRound, ArrowLeft, Link2, Unplug, Loader, CheckCircle, Camera } from 'lucide-react'
+import { User, LogIn, LogOut, Settings, ChevronRight, Shield, Calendar, BarChart3, KeyRound, ArrowLeft, Link2, Unplug, Loader, CheckCircle, Camera, RefreshCw } from 'lucide-react'
 import EduLoginModal from './EduLoginModal'
 
 /* API基础路径 */
@@ -349,7 +349,7 @@ function UserProfile() {
     }
   }
 
-  /* 教务系统登录成功后自动获取课表和成绩 */
+  /* 教务系统登录成功后自动获取课表和成绩（一次性获取，获取完自动断开） */
   const handleEduLoginSuccess = useCallback(async () => {
     setShowEduLoginModal(false)
     setEduSyncing(true)
@@ -541,7 +541,6 @@ function UserProfile() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '16px' }}>
         {/* 教务系统连接 - 核心功能 */}
         <div className="user-menu-item" style={{ cursor: 'pointer' }} onClick={() => {
-          if (user.eduConnected) return
           setShowEduLoginModal(true)
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -550,9 +549,9 @@ function UserProfile() {
               <div style={{ fontSize: '14px', fontWeight: 500 }}>教务系统</div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                 {eduSyncing ? '正在同步课表和成绩数据...' :
-                 eduSyncStatus === 'success' ? '课表和成绩数据已同步' :
+                 eduSyncStatus === 'success' ? '数据已同步到本地缓存' :
                  eduSyncStatus === 'error' ? '同步失败，请重试' :
-                 user.eduConnected ? '已连接 · 课表和成绩数据已同步' : '未连接 · 点击登录教务系统'}
+                 user.eduConnected ? '数据已同步 · 点击可重新获取最新数据' : '未连接 · 点击登录教务系统获取数据'}
               </div>
             </div>
             {eduSyncing && <Loader size={16} style={{ color: 'var(--primary)', animation: 'spin 1s linear infinite' }} />}
@@ -576,8 +575,8 @@ function UserProfile() {
                   cursor: 'pointer',
                 }}
               >
-                <Unplug size={12} />
-                断开
+                <RefreshCw size={12} />
+                重新获取
               </button>
             )}
             {!user.eduConnected && !eduSyncing && (

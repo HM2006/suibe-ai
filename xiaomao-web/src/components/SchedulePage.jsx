@@ -4,7 +4,8 @@
    数据来源：用户页面登录教务系统后自动缓存
    ======================================== */
 import { useState, useMemo, useEffect } from 'react'
-import { Clock, MapPin, User } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Clock, MapPin, User, Calendar } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
 
 /* 星期配置 */
@@ -127,6 +128,7 @@ function transformRealSchedule(realData) {
 }
 
 function SchedulePage() {
+  const navigate = useNavigate()
   const today = new Date().getDay()
   const [selectedDay, setSelectedDay] = useState(
     today >= 1 && today <= 5 ? today - 1 : 0
@@ -191,7 +193,7 @@ function SchedulePage() {
   }, [])
 
   /* 当前使用的课表数据 */
-  const scheduleData = realSchedule || mockScheduleData
+  const scheduleData = realSchedule
 
   /* 获取指定位置的课程（考虑跨节次） */
   const getCourse = (day, slot) => {
@@ -241,26 +243,45 @@ function SchedulePage() {
           <p className="page-desc">查看本周课程安排</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span className={`data-source-tag ${dataSource}`}>
-            {dataSource === 'cached' ? '教务数据' : '模拟数据'}
-          </span>
+          {dataSource === 'cached' && (
+            <span className="data-source-tag cached">教务数据</span>
+          )}
         </div>
       </div>
 
       {/* 未连接教务系统提示 */}
-      {dataSource === 'mock' && (
+      {!realSchedule && (
         <div style={{
-          padding: '12px 16px',
-          background: '#FFFBEB',
-          border: '1px solid #FDE68A',
-          borderRadius: '8px',
-          fontSize: '13px',
-          color: '#92400E',
-          marginBottom: '16px',
+          padding: '40px 20px',
+          textAlign: 'center',
+          color: 'var(--text-muted)',
         }}>
-          当前显示模拟数据。请前往「用户」页面连接教务系统以获取真实课表。
+          <Calendar size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+          <p style={{ fontSize: '15px', fontWeight: 500, marginBottom: '8px', color: 'var(--text-secondary)' }}>
+            暂无课表数据
+          </p>
+          <p style={{ fontSize: '13px', marginBottom: '16px' }}>
+            请前往「用户」页面连接教务系统以获取真实课表
+          </p>
+          <button
+            onClick={() => navigate('/user')}
+            style={{
+              padding: '8px 20px',
+              borderRadius: '8px',
+              border: 'none',
+              background: 'var(--primary)',
+              color: '#fff',
+              fontSize: '13px',
+              cursor: 'pointer',
+            }}
+          >
+            前往连接
+          </button>
         </div>
       )}
+
+      {/* 有数据时显示课表 */}
+      {realSchedule && (<>
 
       {/* 星期选择器 */}
       <div className="schedule-week-selector">
@@ -435,6 +456,7 @@ function SchedulePage() {
           </div>
         )}
       </div>
+      </>)}
     </div>
   )
 }

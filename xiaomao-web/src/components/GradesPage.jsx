@@ -4,6 +4,7 @@
    数据来源：用户页面登录教务系统后自动缓存
    ======================================== */
 import { useState, useMemo, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { TrendingUp, Award, BookOpen, BarChart3 } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
 
@@ -107,6 +108,7 @@ function extractSemesters(grades) {
 }
 
 function GradesPage() {
+  const navigate = useNavigate()
   const [selectedSemester, setSelectedSemester] = useState('全部')
   const { user, token } = useUser()
 
@@ -146,9 +148,9 @@ function GradesPage() {
   }, [token])
 
   /* 当前使用的成绩数据 */
-  const gradesData = realGrades || mockGradesData
+  const gradesData = realGrades
   /* 当前使用的学期列表 */
-  const semesters = realGrades ? extractSemesters(realGrades) : mockSemesters
+  const semesters = realGrades ? extractSemesters(realGrades) : []
 
   /* 根据学期筛选成绩 */
   const filteredGrades = useMemo(() => {
@@ -212,26 +214,45 @@ function GradesPage() {
           <p className="page-desc">查看各科成绩和学业统计</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <span className={`data-source-tag ${dataSource}`}>
-            {dataSource === 'cached' ? '教务数据' : '模拟数据'}
-          </span>
+          {dataSource === 'cached' && (
+            <span className="data-source-tag cached">教务数据</span>
+          )}
         </div>
       </div>
 
       {/* 未连接教务系统提示 */}
-      {dataSource === 'mock' && (
+      {!realGrades && (
         <div style={{
-          padding: '12px 16px',
-          background: '#FFFBEB',
-          border: '1px solid #FDE68A',
-          borderRadius: '8px',
-          fontSize: '13px',
-          color: '#92400E',
-          marginBottom: '16px',
+          padding: '40px 20px',
+          textAlign: 'center',
+          color: 'var(--text-muted)',
         }}>
-          当前显示模拟数据。请前往「用户」页面连接教务系统以获取真实成绩。
+          <BookOpen size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
+          <p style={{ fontSize: '15px', fontWeight: 500, marginBottom: '8px', color: 'var(--text-secondary)' }}>
+            暂无成绩数据
+          </p>
+          <p style={{ fontSize: '13px', marginBottom: '16px' }}>
+            请前往「用户」页面连接教务系统以获取真实成绩
+          </p>
+          <button
+            onClick={() => navigate('/user')}
+            style={{
+              padding: '8px 20px',
+              borderRadius: '8px',
+              border: 'none',
+              background: 'var(--primary)',
+              color: '#fff',
+              fontSize: '13px',
+              cursor: 'pointer',
+            }}
+          >
+            前往连接
+          </button>
         </div>
       )}
+
+      {/* 有数据时显示统计和列表 */}
+      {realGrades && (<>
 
       {/* 统计卡片 */}
       <div className="grades-stats">
@@ -332,6 +353,7 @@ function GradesPage() {
           ))}
         </div>
       </div>
+      </>)}
     </div>
   )
 }

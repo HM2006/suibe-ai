@@ -82,17 +82,9 @@ function findAllCoursesByName(grades, keyword) {
   return grades.filter((g) => g.course.includes(keyword))
 }
 
-/* PDF文本解析 - 提取各类别积分（正则全局匹配，不依赖行分割） */
+/* PDF文本解析 - 提取各类别积分（宽松匹配，支持跨行记录） */
 function parsePdfText(text) {
-  const result = {
-    social: 0,
-    volunteer: 0,
-    innovation: 0,
-    culture: 0,
-    labor: 0,
-  }
-
-  /* 分类关键词映射 */
+  const result = { social: 0, volunteer: 0, innovation: 0, culture: 0, labor: 0 }
   const categoryMap = {
     '社会实践': 'social',
     '志愿服务': 'volunteer',
@@ -100,42 +92,44 @@ function parsePdfText(text) {
     '文体活动': 'culture',
     '劳动实践': 'labor',
   }
-
-  /* 将整个文本按分类标题切割成区块 */
   const categoryNames = Object.keys(categoryMap)
-  const regex = new RegExp(`(${categoryNames.join('|')})\\s*总分[：:]?\\s*[\\d.]+分?`, 'g')
+
+  /* 找到所有分类标题的位置 */
+  const catRegex = new RegExp(`(${categoryNames.join('|')})\\s*总分[：:]?\\s*[\\d.]+分?`, 'g')
   const splitPoints = []
-  let match
-  while ((match = regex.exec(text)) !== null) {
-    const catName = categoryNames.find(n => match[0].includes(n))
-    splitPoints.push({ index: match.index, category: categoryMap[catName] })
+  let m
+  while ((m = catRegex.exec(text)) !== null) {
+    const catName = categoryNames.find(n => m[0].includes(n))
+    splitPoints.push({ index: m.index, category: categoryMap[catName] })
   }
 
-  /* 对每个分类区块，提取目标学期的积分 */
+  /* 学期匹配模式（宽松，允许空格） */
+  const semRegex = /2025\s*[-–—]\s*2026\s*学年\s*第\s*一\s*学期/g
+
   for (let i = 0; i < splitPoints.length; i++) {
     const start = splitPoints[i].index
     const end = i + 1 < splitPoints.length ? splitPoints[i + 1].index : text.length
     const block = text.substring(start, end)
     const catKey = splitPoints[i].category
 
-    /* 在区块中查找所有目标学期的记录，提取积分值 */
-    /* PDF文本中 "2025-2026学年第一学期" 可能被空格拆开，用宽松匹配 */
-    const semPattern = '2025\\s*[-–—]\\s*2026\\s*学年\\s*第\\s*一\\s*学期'
-    const recordRegex = new RegExp(`${semPattern}[\\s\\S]*?(\\d+\\.?\\d*)\\s*$`, 'gm')
-    let recordMatch
-    while ((recordMatch = recordRegex.exec(block)) !== null) {
-      const points = parseFloat(recordMatch[1])
-      if (!isNaN(points) && points > 0) {
-        result[catKey] += points
-      }
+    /* 找到区块中所有学期标签的起始位置 */
+    const semStarts = []
+    let sm
+    semRegex.lastIndex = 0
+    while ((sm = semRegex.exec(block)) !== null) {
+      semStarts.push(sm.index)
     }
 
-    /* 备用方案：如果上面的正则没匹配到，尝试更宽松的方式 */
-    if (result[catKey] === 0) {
-      /* 按 "2025-2026学年第一学期" 后面跟着的内容找数字 */
-      const looseRegex = new RegExp(`${semPattern}[\\s\\S]*?(\\d+\\.?\\d*)`, 'g')
-      while ((recordMatch = looseRegex.exec(block)) !== null) {
-        const points = parseFloat(recordMatch[1])
+    /* 对每两个学期标签之间的文本，提取数字 */
+    for (let j = 0; j < semStarts.length; j++) {
+      const recStart = semStarts[j]
+      const recEnd = j + 1 < semStarts.length ? semStarts[j + 1] : block.length
+      const recText = block.substring(recStart, recEnd)
+
+      /* 提取所有小数，取最后一个作为积分值 */
+      const decimals = recText.match(/\d+\.\d+/g)
+      if (decimals && decimals.length > 0) {
+        const points = parseFloat(decimals[decimals.length - 1])
         if (!isNaN(points) && points > 0 && points < 100) {
           result[catKey] += points
         }
@@ -354,8 +348,8 @@ function ScholarshipPage() {
   })
   const practiceTotal = Math.min(100, practiceDetail.reduce((sum, d) => sum + d.score, 0))
 
-  /* 计算劳动教育得分 */
-  const laborPointsFinal = pdfText ? laborPoints : parseFloat(laborManualInput) || 0
+  /* 计算劳动教育得分（手动输入优先） */
+  const laborPointsFinal = parseFloat(laborManualInput) || 0
   const laborScore = Math.min(100, Math.floor(laborPointsFinal / 0.25) * 10)
 
   /* 计算体育分 */
@@ -936,11 +930,18 @@ function ScholarshipPage() {
       )}
 
       {/* 各类别积分详情 */}
-      {pdfFile && !pdfParsing && (
-        <div style={{ marginTop: '16px' }}>
-          <h4 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', color: 'var(--text-primary)' }}>
-            积分明细（{TARGET_SEMESTER_LABEL}）
-          </h4>
+      {!pdfFile && (
+        <div style={infoBoxStyle('info')}>
+          <Info size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div>
+            没有第二课堂成绩单？可以直接手动填写各项积分。
+          </div>
+        </div>
+      )}
+      <div style={{ marginTop: '16px' }}>
+        <h4 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '12px', color: 'var(--text-primary)' }}>
+          积分明细（{TARGET_SEMESTER_LABEL}）
+        </h4>
           {practiceDetail.map((item) => {
             const manualVal = parseFloat(practiceManual[item.key])
             const hasManual = practiceManual[item.key] !== ''
@@ -1028,7 +1029,7 @@ function ScholarshipPage() {
             </span>
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 
@@ -1052,77 +1053,61 @@ function ScholarshipPage() {
         </div>
       </div>
 
-      {pdfText ? (
-        <>
-          <div style={infoBoxStyle('info')}>
-            <CheckCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
-            <div>
-              已从PDF中提取劳动实践积分：<strong>{laborPoints.toFixed(2)}</strong> 积分
-            </div>
+      {pdfText && (
+        <div style={infoBoxStyle('info')}>
+          <CheckCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div>
+            已从PDF中提取劳动实践积分：<strong>{laborPoints.toFixed(2)}</strong> 积分（已自动填入下方输入框，可手动修改）
           </div>
-          <div style={{
-            background: 'var(--primary-bg)',
+        </div>
+      )}
+      {!pdfText && (
+        <div style={infoBoxStyle('warning')}>
+          <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
+          <div>
+            未上传PDF文件。请在上一步上传第二课堂PDF，或在此手动输入劳动积分。
+          </div>
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <label style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
+          劳动积分：
+        </label>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          value={laborManualInput}
+          onChange={(e) => setLaborManualInput(e.target.value)}
+          placeholder="如 1.88"
+          style={{
+            flex: 1,
+            padding: '10px 14px',
+            border: '1px solid var(--card-border)',
             borderRadius: 'var(--radius-md)',
-            padding: '16px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}>
-            <span style={{ fontSize: '14px', fontWeight: 500 }}>劳动教育分</span>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)' }}>
-              {laborScore}
-            </span>
-          </div>
-        </>
-      ) : (
-        <>
-          <div style={infoBoxStyle('warning')}>
-            <AlertCircle size={16} style={{ flexShrink: 0, marginTop: '2px' }} />
-            <div>
-              未上传PDF文件。请在上一步上传第二课堂PDF，或在此手动输入劳动积分。
-            </div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-            <label style={{ fontSize: '14px', fontWeight: 500, color: 'var(--text-primary)', whiteSpace: 'nowrap' }}>
-              劳动积分：
-            </label>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={laborManualInput}
-              onChange={(e) => setLaborManualInput(e.target.value)}
-              placeholder="如 1.88"
-              style={{
-                flex: 1,
-                padding: '10px 14px',
-                border: '1px solid var(--card-border)',
-                borderRadius: 'var(--radius-md)',
-                fontSize: '14px',
-                background: 'var(--card-bg)',
-                color: 'var(--text-primary)',
-                outline: 'none',
-                maxWidth: '200px',
-              }}
-            />
-          </div>
-          {laborManualInput && parseFloat(laborManualInput) > 0 && (
-            <div style={{
-              background: 'var(--primary-bg)',
-              borderRadius: 'var(--radius-md)',
-              padding: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              marginTop: '16px',
-            }}>
-              <span style={{ fontSize: '14px', fontWeight: 500 }}>劳动教育分</span>
-              <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)' }}>
-                {laborScore}
-              </span>
-            </div>
-          )}
-        </>
+            fontSize: '14px',
+            background: 'var(--card-bg)',
+            color: 'var(--text-primary)',
+            outline: 'none',
+            maxWidth: '200px',
+          }}
+        />
+      </div>
+      {laborManualInput && parseFloat(laborManualInput) > 0 && (
+        <div style={{
+          background: 'var(--primary-bg)',
+          borderRadius: 'var(--radius-md)',
+          padding: '16px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginTop: '16px',
+        }}>
+          <span style={{ fontSize: '14px', fontWeight: 500 }}>劳动教育分</span>
+          <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--primary)' }}>
+            {laborScore}
+          </span>
+        </div>
       )}
     </div>
   )

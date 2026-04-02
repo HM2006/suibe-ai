@@ -383,7 +383,7 @@ function getNoteById(noteId) {
   const note = db.prepare('SELECT * FROM notes WHERE id = ?').get(noteId);
   if (!note) return null;
   const attachments = db.prepare(
-    'SELECT id, filename, mimetype, size, created_at FROM note_attachments WHERE note_id = ? ORDER BY id ASC'
+    'SELECT * FROM note_attachments WHERE note_id = ? ORDER BY id ASC'
   ).all(noteId);
   return { ...note, attachments };
 }

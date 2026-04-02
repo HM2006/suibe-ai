@@ -375,6 +375,7 @@ select {
   overflow-y: auto;
   overflow-x: hidden;
   min-height: 0;
+  position: relative;
 }
 
 /* ========================================
@@ -1641,6 +1642,15 @@ select {
   .schedule-table-header,
   .schedule-table-body {
     grid-template-columns: 50px repeat(5, 1fr);
+  }
+
+  /* 移动端隐藏课表网格，只显示概览列表 */
+  .schedule-table {
+    display: none;
+  }
+
+  .schedule-overview {
+    margin-bottom: 16px;
   }
 
   .grade-row {

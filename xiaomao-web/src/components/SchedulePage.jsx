@@ -296,7 +296,84 @@ function SchedulePage() {
         ))}
       </div>
 
-      {/* 课程表格 */}
+      {/* 今日课程概览（移动端友好） */}
+      <div className="schedule-overview">
+        <h3 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px', color: 'var(--text-primary)' }}>
+          {weekDays[selectedDay]}课程概览
+        </h3>
+        {scheduleData[selectedDay] && scheduleData[selectedDay].length > 0 ? (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {scheduleData[selectedDay]
+              .sort((a, b) => a.slot - b.slot)
+              .map((course) => {
+                const colorConfig = courseColors[course.color % courseColors.length]
+                const isCurrent = isCurrentSlot(selectedDay, course.slot)
+                return (
+                  <div
+                    key={course.name + course.time}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
+                      padding: '12px 16px',
+                      background: 'var(--card-bg)',
+                      border: `1px solid ${isCurrent ? 'var(--primary)' : 'var(--card-border)'}`,
+                      borderRadius: 'var(--radius-md)',
+                      boxShadow: isCurrent ? '0 0 0 2px rgba(79,70,229,0.1)' : 'none',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '4px',
+                        height: '40px',
+                        borderRadius: '2px',
+                        background: colorConfig.text,
+                        flexShrink: 0,
+                      }}
+                    />
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
+                        {course.name}
+                        {isCurrent && (
+                          <span
+                            style={{
+                              marginLeft: '8px',
+                              fontSize: '11px',
+                              padding: '1px 6px',
+                              background: '#EEF2FF',
+                              color: '#4F46E5',
+                              borderRadius: 'var(--radius-full)',
+                            }}
+                          >
+                            进行中
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+                        {course.teacher} · {course.room} · {course.time}
+                        {course.weeks && ` · ${course.weeks}`}
+                      </div>
+                    </div>
+                    <Clock size={16} style={{ color: 'var(--text-muted)' }} />
+                  </div>
+                )
+              })}
+          </div>
+        ) : (
+          <div
+            style={{
+              textAlign: 'center',
+              padding: '32px',
+              color: 'var(--text-muted)',
+              fontSize: '14px',
+            }}
+          >
+            今天没有课程，好好休息吧！
+          </div>
+        )}
+      </div>
+
+      {/* 课程表格（桌面端显示） */}
       <div className="schedule-table">
         {/* 表头 */}
         <div className="schedule-table-header">
@@ -378,83 +455,6 @@ function SchedulePage() {
             </>
           ))}
         </div>
-      </div>
-
-      {/* 今日课程概览 */}
-      <div style={{ marginTop: '20px' }}>
-        <h3 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px', color: 'var(--text-primary)' }}>
-          {weekDays[selectedDay]}课程概览
-        </h3>
-        {scheduleData[selectedDay] && scheduleData[selectedDay].length > 0 ? (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {scheduleData[selectedDay]
-              .sort((a, b) => a.slot - b.slot)
-              .map((course) => {
-                const colorConfig = courseColors[course.color % courseColors.length]
-                const isCurrent = isCurrentSlot(selectedDay, course.slot)
-                return (
-                  <div
-                    key={course.name + course.time}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '12px 16px',
-                      background: 'var(--card-bg)',
-                      border: `1px solid ${isCurrent ? 'var(--primary)' : 'var(--card-border)'}`,
-                      borderRadius: 'var(--radius-md)',
-                      boxShadow: isCurrent ? '0 0 0 2px rgba(79,70,229,0.1)' : 'none',
-                    }}
-                  >
-                    <div
-                      style={{
-                        width: '4px',
-                        height: '40px',
-                        borderRadius: '2px',
-                        background: colorConfig.text,
-                        flexShrink: 0,
-                      }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: '14px', color: 'var(--text-primary)' }}>
-                        {course.name}
-                        {isCurrent && (
-                          <span
-                            style={{
-                              marginLeft: '8px',
-                              fontSize: '11px',
-                              padding: '1px 6px',
-                              background: '#EEF2FF',
-                              color: '#4F46E5',
-                              borderRadius: 'var(--radius-full)',
-                            }}
-                          >
-                            进行中
-                          </span>
-                        )}
-                      </div>
-                      <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                        {course.teacher} · {course.room} · {course.time}
-                        {course.weeks && ` · ${course.weeks}`}
-                      </div>
-                    </div>
-                    <Clock size={16} style={{ color: 'var(--text-muted)' }} />
-                  </div>
-                )
-              })}
-          </div>
-        ) : (
-          <div
-            style={{
-              textAlign: 'center',
-              padding: '32px',
-              color: 'var(--text-muted)',
-              fontSize: '14px',
-            }}
-          >
-            今天没有课程，好好休息吧！
-          </div>
-        )}
       </div>
       </>)}
     </div>

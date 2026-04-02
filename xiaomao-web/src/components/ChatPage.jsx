@@ -6,6 +6,7 @@ import { useState, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
+import { useUser } from '../contexts/UserContext'
 import {
   Send,
   Map,
@@ -31,17 +32,16 @@ const quickActions = [
   { label: '奖学金', icon: Award, message: '帮我计算奖学金综合分' },
 ]
 
-/* 本地快捷回复模板 */
-const localResponses = {
+/* 本地快捷回复模板（接收token参数用于鉴权） */
+const getLocalResponses = (token) => ({
   '帮我导航到图书馆': async () => {
     return `## 📚 图书馆导航\n\n📍 **上海对外经贸大学松江校区图书馆**\n\n**位置**：校园中心区域，博学路与思源路交汇处\n\n**开放时间**：\n- 周一至周五：8:00 - 22:00\n- 周六至周日：9:00 - 21:00\n\n**楼层导览**：\n- 1F：总服务台、自助借还机、报刊阅览室\n- 2F：社会科学图书借阅区\n- 3F：自然科学图书借阅区\n- 4F：电子阅览室、自习区\n\n💡 **小贴士**：考试周期间图书馆会延长开放时间，建议提前关注图书馆公众号通知。\n\n你可以点击左侧「校园导航」查看详细地图哦！`
   },
-  '帮我查看今天的课表': async () => {
-    try {
-      const token = localStorage.getItem('token')
-      if (!token) return '## 📅 课表查询\n\n请先登录后查看课表。'
-      const res = await fetch('/api/user/profile', {
-        headers: { 'Authorization': `Bearer ${token}` }
+  '帮我查看今天的课表': async (tkn) => {
+      try {
+        if (!tkn) return '## 📅 课表查询\n\n请先登录后查看课表。'
+        const res = await fetch('/api/user/profile', {
+          headers: { 'Authorization': `Bearer ${tkn}` }
       })
       if (!res.ok) return '## 📅 课表查询\n\n获取课表数据失败，请稍后重试。'
       const data = await res.json()
@@ -78,12 +78,11 @@ const localResponses = {
       return '## 📅 课表查询\n\n获取课表数据失败，请稍后重试。'
     }
   },
-  '帮我查询本学期成绩': async () => {
-    try {
-      const token = localStorage.getItem('token')
-      if (!token) return '## 📊 成绩查询\n\n请先登录后查看成绩。'
-      const res = await fetch('/api/user/profile', {
-        headers: { 'Authorization': `Bearer ${token}` }
+  '帮我查询本学期成绩': async (tkn) => {
+      try {
+        if (!tkn) return '## 📊 成绩查询\n\n请先登录后查看成绩。'
+        const res = await fetch('/api/user/profile', {
+          headers: { 'Authorization': `Bearer ${tkn}` }
       })
       if (!res.ok) return '## 📊 成绩查询\n\n获取成绩数据失败，请稍后重试。'
       const data = await res.json()
@@ -146,7 +145,7 @@ const localResponses = {
   '帮我计算奖学金综合分': () => {
     return `## 🏅 奖学金综合分计算\n\n点击左侧「奖学金」即可使用智能奖学金计算器！\n\n**功能特色**：\n- 📊 自动导入教务成绩数据\n- 📄 支持上传第二课堂PDF自动提取积分\n- ✏️ 支持手动填写各项分数\n- 📈 实时计算综合分并展示各项权重\n\n**综合分计算公式**：\n> 综合分 = 智育×60% + 体育×5% + 德育×20% + 实践创新×10% + 劳动×5% + 附加分\n\n快去试试吧！`
   }
-}
+})
 
 /* 欢迎消息 */
 const welcomeMessage = `你好！我是**小贸**，你的校园AI助手 🎓
@@ -162,6 +161,7 @@ const welcomeMessage = `你好！我是**小贸**，你的校园AI助手 🎓
 有什么我可以帮你的吗？`
 
 function ChatPage() {
+  const { token } = useUser()
   /* 消息列表状态 */
   const [messages, setMessages] = useState([])
   /* 输入框内容 */
@@ -321,12 +321,13 @@ function ChatPage() {
 
     try {
       /* 获取回复内容 */
-      const responseGenerator = localResponses[messageText]
+      const responses = getLocalResponses(token)
+      const responseGenerator = responses[messageText]
       if (!responseGenerator) {
         setMessages(prev => prev.map(m => m.id === aiMsgId ? { ...m, content: '抱歉，功能暂不可用。' } : m))
         return
       }
-      const fullContent = await responseGenerator()
+      const fullContent = await responseGenerator(token)
 
       /* 逐字输出（模拟流式） */
       let current = ''

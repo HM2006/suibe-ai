@@ -200,9 +200,6 @@ router.get('/edu/schedule', asyncHandler(async (req, res) => {
   }
 
   res.json({ success: true, data: scheduleData });
-
-  // 教务登录有效期短，获取数据后自动关闭浏览器释放资源
-  eduProxy.close().catch(() => {});
 }));
 
 // ==================== 成绩查询 ====================
@@ -234,9 +231,6 @@ router.get('/edu/grades', asyncHandler(async (req, res) => {
   }
 
   res.json({ success: true, data: gradesData });
-
-  // 教务登录有效期短，获取数据后自动关闭浏览器释放资源
-  eduProxy.close().catch(() => {});
 }));
 
 // ==================== 登出 ====================

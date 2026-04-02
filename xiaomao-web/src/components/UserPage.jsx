@@ -373,7 +373,7 @@ function UserProfile() {
         console.warn('[UserPage] 课表同步失败:', err)
       }
 
-      /* 获取成绩数据 */
+      /* 获取成绩数据（必须在课表之后，浏览器还在） */
       try {
         const gradesUrl = `${EDU_API_BASE}/grades?userId=${user.id}`
         const gradesRes = await fetch(gradesUrl)
@@ -386,6 +386,14 @@ function UserProfile() {
         }
       } catch (err) {
         console.warn('[UserPage] 成绩同步失败:', err)
+      }
+
+      /* 数据获取完毕，关闭浏览器释放资源 */
+      try {
+        await fetch(`${EDU_API_BASE}/logout?userId=${user.id}`, { method: 'POST' })
+        console.log('[UserPage] 教务浏览器已关闭')
+      } catch (err) {
+        console.warn('[UserPage] 关闭教务浏览器失败:', err)
       }
 
       /* 刷新用户信息（更新 edu_connected 状态） */

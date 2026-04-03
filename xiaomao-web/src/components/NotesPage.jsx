@@ -1,15 +1,13 @@
 /* ========================================
-   小贸 - 随记页面（重构版）
-   contentEditable编辑器 + 骨架屏AI速览 + 双状态工具栏
+   小贸 - 随记页面（精简版）
+   textarea纯文本 + 附件独立存储 + AI速览 + visualViewport键盘适配
    ======================================== */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, X, Save, Trash2, FileText, Paperclip,
   Sparkles, Loader, ChevronLeft,
-  Download, AlertCircle, Camera, FileUp,
-  CheckSquare, Type, Heading1, Heading2, Heading3,
-  Bold, Strikethrough, Palette, Copy
+  Download, AlertCircle, Camera, FileUp, Copy
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
@@ -74,7 +72,7 @@ const noteColors = [
   { bg: '#FFEDD5', border: '#FDBA74' },
 ]
 
-/* ========== 骨架屏组件 ========== */
+/* ========== 骨架屏 ========== */
 function SkeletonLoader() {
   return (
     <div style={{ padding: '16px 18px' }}>
@@ -106,7 +104,7 @@ function NoteCard({ note, onClick }) {
           {note.ai_summary && <Sparkles size={12} style={{ color: '#F59E0B', flexShrink: 0 }} />}
         </div>
         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
-          {note.content?.replace(/<[^>]*>/g, '') || '暂无内容'}
+          {note.content || '暂无内容'}
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
           <span>{formatDate(note.updated_at)}</span>
@@ -123,19 +121,46 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
   const [noteId, setNoteId] = useState(initialNote?.id || null)
   const [title, setTitle] = useState(initialNote?.title || '')
   const [courseName, setCourseName] = useState(initialNote?.course_name || '')
-  const [htmlContent, setHtmlContent] = useState(initialNote?.content || '')
+  const [content, setContent] = useState(initialNote?.content || '')
   const [aiSummary, setAiSummary] = useState(initialNote?.ai_summary || '')
   const [attachments, setAttachments] = useState(initialNote?.attachments || [])
   const [isSaving, setIsSaving] = useState(false)
   const [isSummarizing, setIsSummarizing] = useState(false)
   const [showAiSummary, setShowAiSummary] = useState(!!initialNote?.ai_summary)
   const [error, setError] = useState('')
-  const [toolbarState, setToolbarState] = useState('A') // 'A' = 主工具栏, 'B' = 格式工具栏
   const [isLoadingNote, setIsLoadingNote] = useState(!!initialNote?.id)
 
-  const editorRef = useRef(null)
+  /* visualViewport 键盘适配 */
+  const [keyboardHeight, setKeyboardHeight] = useState(0)
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false)
+
   const fileInputRef = useRef(null)
   const imageInputRef = useRef(null)
+  const textareaRef = useRef(null)
+
+  /* 监听 visualViewport 解决移动端键盘遮挡 */
+  useEffect(() => {
+    const vv = window.visualViewport
+    if (!vv) return
+
+    const onResize = () => {
+      const diff = window.innerHeight - vv.height
+      if (diff > 100) {
+        setKeyboardHeight(diff)
+        setIsKeyboardOpen(true)
+      } else {
+        setKeyboardHeight(0)
+        setIsKeyboardOpen(false)
+      }
+    }
+
+    vv.addEventListener('resize', onResize)
+    vv.addEventListener('scroll', onResize)
+    return () => {
+      vv.removeEventListener('resize', onResize)
+      vv.removeEventListener('scroll', onResize)
+    }
+  }, [])
 
   /* 打开已有随记时，从服务端加载完整数据（含附件base64） */
   useEffect(() => {
@@ -149,7 +174,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
         if (data.success) {
           const n = data.data
           setAttachments(n.attachments || [])
-          setHtmlContent(n.content || '')
+          setContent(n.content || '')
           setAiSummary(n.ai_summary || '')
           setShowAiSummary(!!n.ai_summary)
         }
@@ -161,21 +186,6 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
     }
     loadFullNote()
   }, [initialNote?.id, token])
-
-  /* 同步编辑器内容 */
-  useEffect(() => {
-    if (editorRef.current && !isLoadingNote) {
-      if (editorRef.current.innerHTML !== htmlContent) {
-        editorRef.current.innerHTML = htmlContent
-      }
-    }
-  }, [isLoadingNote])
-
-  const handleEditorInput = () => {
-    if (editorRef.current) {
-      setHtmlContent(editorRef.current.innerHTML)
-    }
-  }
 
   /* 通用保存 */
   const doSave = useCallback(async (t, cn, c, aiS) => {
@@ -222,7 +232,6 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
     if (!token) return
     setIsSaving(true); setError('')
     try {
-      const content = editorRef.current?.innerHTML || ''
       const savedNote = await doSave(title.trim(), courseName, content, aiSummary)
       await uploadNewAttachments(savedNote.id, attachments)
       onSave(savedNote)
@@ -263,7 +272,6 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
     if (!token) return
     setIsSummarizing(true); setShowAiSummary(true); setError('')
     try {
-      const content = editorRef.current?.innerHTML || ''
       const savedNote = await doSave(title.trim() || '未命名随记', courseName, content, aiSummary)
       await uploadNewAttachments(savedNote.id, attachments)
 
@@ -301,31 +309,14 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
 
   /* 复制AI总结 */
   const handleCopySummary = () => {
-    navigator.clipboard.writeText(aiSummary).then(() => {
-      // 简单反馈
-    }).catch(() => {})
-  }
-
-  /* 格式化命令 */
-  const execFormat = (command, value) => {
-    document.execCommand(command, false, value || null)
-    editorRef.current?.focus()
-  }
-
-  /* 插入待办 */
-  const insertChecklist = () => {
-    execFormat('insertHTML', '<div>☐ </div><br>')
-  }
-
-  /* 获取纯文本用于AI（去掉HTML标签） */
-  const getPlainText = () => {
-    const div = document.createElement('div')
-    div.innerHTML = editorRef.current?.innerHTML || ''
-    return div.textContent || div.innerText || ''
+    navigator.clipboard.writeText(aiSummary).catch(() => {})
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+    <div style={{
+      display: 'flex', flexDirection: 'column',
+      height: '100vh', height: '100dvh',
+    }}>
       {/* 顶部导航栏 */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -340,6 +331,16 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
           <ChevronLeft size={20} /> 返回
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {noteId && (
+            <button onClick={onDelete} style={{
+              display: 'flex', alignItems: 'center', gap: '4px',
+              padding: '6px 12px', borderRadius: '20px', border: 'none',
+              background: '#FEF2F2', color: '#DC2626', fontSize: '12px',
+              fontWeight: 600, cursor: 'pointer',
+            }}>
+              <Trash2 size={12} /> 删除
+            </button>
+          )}
           <button onClick={handleSave} disabled={isSaving} style={{
             display: 'flex', alignItems: 'center', gap: '4px',
             padding: '6px 14px', borderRadius: '20px', border: 'none',
@@ -361,7 +362,11 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
       )}
 
       {/* 可滚动编辑区域 */}
-      <div style={{ flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{
+        flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
+        /* 键盘打开时，让内容区缩小，底栏可见 */
+        paddingBottom: isKeyboardOpen ? `${keyboardHeight + 56}px` : '56px',
+      }}>
         <div style={{ maxWidth: '600px', margin: '0 auto', padding: '16px' }}>
 
           {/* AI速览区域 */}
@@ -400,7 +405,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
               ) : (
                 <div style={{ padding: '20px 16px', textAlign: 'center', color: '#D97706', fontSize: '13px' }}>
                   <Sparkles size={20} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.5 }} />
-                  点击底部AI速览按钮生成总结
+                  点击底部 AI速览 按钮生成总结
                 </div>
               )}
             </div>
@@ -428,27 +433,31 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
             </div>
           )}
 
-          {/* contentEditable 编辑器 */}
+          {/* 纯文本 textarea */}
           {isLoadingNote ? (
             <div style={{ minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Loader size={18} style={{ animation: 'spin 1s linear infinite', color: 'var(--text-muted)' }} />
             </div>
           ) : (
-            <div
-              ref={editorRef}
-              className="note-editor-canvas"
-              contentEditable
-              suppressContentEditableWarning
-              onInput={handleEditorInput}
-              data-placeholder="开始记录..."
-              dangerouslySetInnerHTML={{ __html: htmlContent }}
+            <textarea
+              ref={textareaRef}
+              value={content}
+              onChange={e => setContent(e.target.value)}
+              placeholder="开始记录..."
+              style={{
+                width: '100%', minHeight: '200px', border: 'none', background: 'transparent',
+                color: 'var(--text-primary)', fontSize: '15px', lineHeight: '1.8',
+                resize: 'none', outline: 'none', fontFamily: 'inherit',
+                caretColor: 'var(--primary)',
+                WebkitAppearance: 'none',
+              }}
             />
           )}
 
           {/* 图片附件 - 全宽圆角 */}
           {attachments.filter(a => isImage(a.mimetype)).map(att => (
             <div key={att.id} style={{ position: 'relative', margin: '12px 0', borderRadius: '14px', overflow: 'hidden', border: '1px solid var(--card-border)' }}>
-              <img src={`data:${att.mimetype};base64,${att.data}`} alt={att.filename} style={{ width: '100%', display: 'block', borderRadius: '14px' }} />
+              <img src={`data:${att.mimetype};base64,${att.data}`} alt={att.filename} style={{ width: '100%', display: 'block' }} />
               <button onClick={() => handleRemoveAttachment(att)} style={{
                 position: 'absolute', top: '8px', right: '8px', width: '24px', height: '24px',
                 borderRadius: '50%', background: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none',
@@ -463,16 +472,12 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
             const color = getFileColor(ext)
             return (
               <div key={att.id} className="file-card">
-                <div className="file-card-icon" style={{ background: color }}>
-                  {ext}
-                </div>
+                <div className="file-card-icon" style={{ background: color }}>{ext}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: '13px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {att.filename}
                   </div>
-                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    {formatSize(att.size)}
-                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{formatSize(att.size)}</div>
                 </div>
                 {!att.isNew && (
                   <Download size={16} style={{ cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0 }} onClick={() => handleDownload(att)} />
@@ -481,78 +486,38 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
               </div>
             )
           })}
-
-          {/* 底部占位（防止内容被工具栏遮挡） */}
-          <div style={{ height: '70px' }} />
         </div>
       </div>
 
-      {/* 底部工具栏 - 状态A */}
-      {toolbarState === 'A' && (
-        <div className="note-toolbar">
-          <button className="note-toolbar-btn" onClick={handleSummarize} disabled={isSummarizing}
-            style={{ color: isSummarizing ? 'var(--text-muted)' : '#F59E0B' }}>
-            <Sparkles size={20} />
-            <span>AI速览</span>
-          </button>
-          <button className="note-toolbar-btn" onClick={() => imageInputRef.current?.click()}>
-            <Camera size={20} />
-            <span>图片</span>
-          </button>
-          <input ref={imageInputRef} type="file" accept="image/*" multiple onChange={handleAddFiles} style={{ display: 'none' }} />
-          <button className="note-toolbar-btn" onClick={() => fileInputRef.current?.click()}>
-            <FileUp size={20} />
-            <span>文件</span>
-          </button>
-          <input ref={fileInputRef} type="file" multiple onChange={handleAddFiles} style={{ display: 'none' }} />
-          <button className="note-toolbar-btn" onClick={insertChecklist}>
-            <CheckSquare size={20} />
-            <span>待办</span>
-          </button>
-          <button className="note-toolbar-btn" onClick={() => setToolbarState('B')}>
-            <Type size={20} />
-            <span>格式</span>
-          </button>
-        </div>
-      )}
-
-      {/* 底部工具栏 - 状态B（格式工具栏） */}
-      {toolbarState === 'B' && (
-        <div className="note-toolbar" style={{ justifyContent: 'center', gap: '4px' }}>
-          <button className="format-btn" onClick={() => execFormat('foreColor', '#EF4444')} title="字体颜色">
-            <Palette size={16} />
-          </button>
-          <button className="format-btn" onClick={() => execFormat('formatBlock', '<h1>')} title="一级标题">
-            <Heading1 size={16} />
-          </button>
-          <button className="format-btn" onClick={() => execFormat('formatBlock', '<h2>')} title="二级标题">
-            <Heading2 size={16} />
-          </button>
-          <button className="format-btn" onClick={() => execFormat('formatBlock', '<h3>')} title="三级标题">
-            <Heading3 size={16} />
-          </button>
-          <button className="format-btn" onClick={() => execFormat('bold')} title="加粗">
-            <Bold size={16} />
-          </button>
-          <button className="format-btn" onClick={() => execFormat('strikeThrough')} title="删除线">
-            <Strikethrough size={16} />
-          </button>
-          <button className="format-btn" onClick={() => setToolbarState('A')} title="返回" style={{ color: '#EF4444' }}>
-            <X size={16} />
-          </button>
-        </div>
-      )}
-
-      {/* 删除按钮（浮动） */}
-      {noteId && (
-        <button onClick={onDelete} style={{
-          position: 'absolute', bottom: toolbarState === 'A' ? '68px' : '68px', right: '16px',
-          width: '36px', height: '36px', borderRadius: '50%', border: 'none',
-          background: '#FEF2F2', color: '#DC2626', cursor: 'pointer',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 2px 8px rgba(0,0,0,0.1)', zIndex: 5,
-        }}><Trash2 size={16} /></button>
-      )}
+      {/* 底部工具栏 - 3个按钮，通过visualViewport适配键盘 */}
+      <div style={{
+        position: 'fixed',
+        left: 0, right: 0,
+        bottom: isKeyboardOpen ? keyboardHeight : 0,
+        zIndex: 50,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-around',
+        padding: '8px 12px',
+        paddingBottom: `calc(8px + env(safe-area-inset-bottom, 0px))`,
+        borderTop: '1px solid var(--card-border)',
+        background: 'var(--card-bg)',
+        transition: 'bottom 0.1s ease-out',
+      }}>
+        <button className="note-toolbar-btn" onClick={handleSummarize} disabled={isSummarizing}
+          style={{ color: isSummarizing ? 'var(--text-muted)' : '#F59E0B' }}>
+          <Sparkles size={20} />
+          <span>AI速览</span>
+        </button>
+        <button className="note-toolbar-btn" onClick={() => imageInputRef.current?.click()}>
+          <Camera size={20} />
+          <span>图片</span>
+        </button>
+        <input ref={imageInputRef} type="file" accept="image/*" multiple onChange={handleAddFiles} style={{ display: 'none' }} />
+        <button className="note-toolbar-btn" onClick={() => fileInputRef.current?.click()}>
+          <FileUp size={20} />
+          <span>文件</span>
+        </button>
+        <input ref={fileInputRef} type="file" multiple onChange={handleAddFiles} style={{ display: 'none' }} />
+      </div>
     </div>
   )
 }
@@ -597,23 +562,21 @@ function NotesPage() {
   /* 编辑模式 */
   if (editingNote !== null) {
     return (
-      <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'var(--bg)', zIndex: 100, display: 'flex', flexDirection: 'column' }}>
-        <NoteEditor
-          initialNote={editingNote}
-          courses={courses} token={token}
-          onSave={() => { setEditingNote(null); loadData() }}
-          onDelete={async () => {
-            const nid = editingNote?.id
-            if (!nid) return
-            if (!confirm('确定删除这条随记吗？')) return
-            try {
-              await fetch(`${API_BASE}/${nid}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })
-              setEditingNote(null); loadData()
-            } catch { /* ignore */ }
-          }}
-          onBack={() => setEditingNote(null)}
-        />
-      </div>
+      <NoteEditor
+        initialNote={editingNote}
+        courses={courses} token={token}
+        onSave={() => { setEditingNote(null); loadData() }}
+        onDelete={async () => {
+          const nid = editingNote?.id
+          if (!nid) return
+          if (!confirm('确定删除这条随记吗？')) return
+          try {
+            await fetch(`${API_BASE}/${nid}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })
+            setEditingNote(null); loadData()
+          } catch { /* ignore */ }
+        }}
+        onBack={() => setEditingNote(null)}
+      />
     )
   }
 

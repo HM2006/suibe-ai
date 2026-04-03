@@ -949,27 +949,6 @@ select {
   overflow-y: hidden;
 }
 
-/* 编辑器光标 */
-.note-editor-canvas {
-  caret-color: var(--primary);
-  outline: none;
-  min-height: 200px;
-  font-size: 14px;
-  line-height: 1.8;
-  color: var(--text-primary);
-  word-break: break-word;
-}
-
-.note-editor-canvas:empty::before {
-  content: attr(data-placeholder);
-  color: var(--text-muted);
-  pointer-events: none;
-}
-
-.note-editor-canvas h1 { font-size: 20px; font-weight: 700; margin: 8px 0; }
-.note-editor-canvas h2 { font-size: 17px; font-weight: 700; margin: 6px 0; }
-.note-editor-canvas h3 { font-size: 15px; font-weight: 700; margin: 4px 0; }
-
 /* 文件卡片 */
 .file-card {
   display: flex;
@@ -1030,28 +1009,6 @@ select {
 .note-toolbar-btn.active {
   color: var(--primary);
   background: rgba(79, 70, 229, 0.08);
-}
-
-/* 格式工具栏按钮 */
-.format-btn {
-  width: 36px;
-  height: 36px;
-  border: none;
-  background: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s, color 0.15s;
-}
-
-.format-btn:hover {
-  background: var(--bg-secondary);
-  color: var(--primary);
 }
 
 @media (max-width: 768px) {

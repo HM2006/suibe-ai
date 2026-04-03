@@ -6,8 +6,9 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Plus, X, Save, Trash2, FileText, Paperclip,
-  Sparkles, Loader, ChevronLeft,
-  Download, AlertCircle, Camera, FileUp, Copy
+  Sparkles, Loader, ChevronLeft, ChevronDown, ChevronUp,
+  Download, AlertCircle, Camera, FileUp, Copy,
+  Filter, Check
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
@@ -61,17 +62,6 @@ function getFileColor(ext) {
   return '#6B7280'
 }
 
-/* ========== 便签颜色 ========== */
-const noteColors = [
-  { bg: '#FFFFFF', border: '#E2E8F0' },
-  { bg: '#FEF9C3', border: '#FDE68A' },
-  { bg: '#DBEAFE', border: '#93C5FD' },
-  { bg: '#D1FAE5', border: '#6EE7B7' },
-  { bg: '#FCE7F3', border: '#F9A8D4' },
-  { bg: '#EDE9FE', border: '#C4B5FD' },
-  { bg: '#FFEDD5', border: '#FDBA74' },
-]
-
 /* ========== 骨架屏 ========== */
 function SkeletonLoader() {
   return (
@@ -83,13 +73,31 @@ function SkeletonLoader() {
   )
 }
 
+/* ========== Toast 提示 ========== */
+function Toast({ message, onDone }) {
+  useEffect(() => {
+    const t = setTimeout(onDone, 2000)
+    return () => clearTimeout(t)
+  }, [onDone])
+  return (
+    <div style={{
+      position: 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)',
+      padding: '10px 24px', borderRadius: '20px',
+      background: '#059669', color: '#fff', fontSize: '14px', fontWeight: 500,
+      boxShadow: '0 4px 12px rgba(5,150,105,0.3)', zIndex: 200,
+      animation: 'fadeIn 0.2s ease',
+    }}>
+      ✓ {message}
+    </div>
+  )
+}
+
 /* ========== 便签卡片（列表） ========== */
 function NoteCard({ note, onClick }) {
-  const color = noteColors[(note.id || 0) % noteColors.length]
   return (
     <div className="note-card" onClick={onClick}
       onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)' }}
-      onMouseLeave={e => { e.currentTarget.style.borderColor = color.border; e.currentTarget.style.boxShadow = 'none' }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--card-border)'; e.currentTarget.style.boxShadow = 'none' }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
@@ -127,8 +135,11 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
   const [isSaving, setIsSaving] = useState(false)
   const [isSummarizing, setIsSummarizing] = useState(false)
   const [showAiSummary, setShowAiSummary] = useState(!!initialNote?.ai_summary)
+  const [aiCollapsed, setAiCollapsed] = useState(false)
   const [error, setError] = useState('')
+  const [toast, setToast] = useState('')
   const [isLoadingNote, setIsLoadingNote] = useState(!!initialNote?.id)
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
 
   /* visualViewport 键盘适配 */
   const [keyboardHeight, setKeyboardHeight] = useState(0)
@@ -136,40 +147,33 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
 
   const fileInputRef = useRef(null)
   const imageInputRef = useRef(null)
-  const textareaRef = useRef(null)
 
-  /* 监听 visualViewport 解决移动端键盘遮挡 */
+  /* 跟踪未保存的修改 */
+  const markChanged = useCallback(() => setHasUnsavedChanges(true), [])
+  const handleTitleChange = (e) => { setTitle(e.target.value); markChanged() }
+  const handleCourseChange = (e) => { setCourseName(e.target.value); markChanged() }
+  const handleContentChange = (e) => { setContent(e.target.value); markChanged() }
+
+  /* 监听 visualViewport */
   useEffect(() => {
     const vv = window.visualViewport
     if (!vv) return
-
     const onResize = () => {
       const diff = window.innerHeight - vv.height
-      if (diff > 100) {
-        setKeyboardHeight(diff)
-        setIsKeyboardOpen(true)
-      } else {
-        setKeyboardHeight(0)
-        setIsKeyboardOpen(false)
-      }
+      if (diff > 100) { setKeyboardHeight(diff); setIsKeyboardOpen(true) }
+      else { setKeyboardHeight(0); setIsKeyboardOpen(false) }
     }
-
     vv.addEventListener('resize', onResize)
     vv.addEventListener('scroll', onResize)
-    return () => {
-      vv.removeEventListener('resize', onResize)
-      vv.removeEventListener('scroll', onResize)
-    }
+    return () => { vv.removeEventListener('resize', onResize); vv.removeEventListener('scroll', onResize) }
   }, [])
 
-  /* 打开已有随记时，从服务端加载完整数据（含附件base64） */
+  /* 加载完整随记数据 */
   useEffect(() => {
     if (!initialNote?.id || !token) return
     const loadFullNote = async () => {
       try {
-        const res = await fetch(`${API_BASE}/${initialNote.id}`, {
-          headers: { 'Authorization': `Bearer ${token}` },
-        })
+        const res = await fetch(`${API_BASE}/${initialNote.id}`, { headers: { 'Authorization': `Bearer ${token}` } })
         const data = await res.json()
         if (data.success) {
           const n = data.data
@@ -178,11 +182,8 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
           setAiSummary(n.ai_summary || '')
           setShowAiSummary(!!n.ai_summary)
         }
-      } catch (err) {
-        console.warn('加载随记详情失败:', err)
-      } finally {
-        setIsLoadingNote(false)
-      }
+      } catch (err) { console.warn('加载随记详情失败:', err) }
+      finally { setIsLoadingNote(false) }
     }
     loadFullNote()
   }, [initialNote?.id, token])
@@ -227,14 +228,15 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
     setAttachments(prev => prev.map(a => a.isNew ? { ...a, isNew: false } : a))
   }, [token])
 
-  /* 保存按钮 */
+  /* 保存按钮 - 保存后显示toast，不返回 */
   const handleSave = async () => {
     if (!token) return
     setIsSaving(true); setError('')
     try {
       const savedNote = await doSave(title.trim(), courseName, content, aiSummary)
       await uploadNewAttachments(savedNote.id, attachments)
-      onSave(savedNote)
+      setHasUnsavedChanges(false)
+      setToast('保存成功')
     } catch (err) { setError(err.message || '保存失败') }
     finally { setIsSaving(false) }
   }
@@ -248,9 +250,9 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
         const data = await fileToBase64(file)
         setAttachments(prev => [...prev, {
           id: `new_${Date.now()}_${Math.random()}`,
-          filename: file.name, mimetype: file.type, size: file.size,
-          data, isNew: true,
+          filename: file.name, mimetype: file.type, size: file.size, data, isNew: true,
         }])
+        markChanged()
       } catch { setError(`读取 "${file.name}" 失败`) }
     }
     e.target.value = ''
@@ -258,11 +260,9 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
 
   /* 删除附件 */
   const handleRemoveAttachment = async (att) => {
-    if (att.isNew) { setAttachments(prev => prev.filter(a => a.id !== att.id)); return }
+    if (att.isNew) { setAttachments(prev => prev.filter(a => a.id !== att.id)); markChanged(); return }
     try {
-      await fetch(`${API_BASE}/${noteId}/attachments/${att.id}`, {
-        method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` },
-      })
+      await fetch(`${API_BASE}/${noteId}/attachments/${att.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })
       setAttachments(prev => prev.filter(a => a.id !== att.id))
     } catch { setError('删除附件失败') }
   }
@@ -270,19 +270,15 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
   /* AI速览 */
   const handleSummarize = async () => {
     if (!token) return
-    setIsSummarizing(true); setShowAiSummary(true); setError('')
+    setIsSummarizing(true); setShowAiSummary(true); setAiCollapsed(false); setError('')
     try {
       const savedNote = await doSave(title.trim() || '未命名随记', courseName, content, aiSummary)
       await uploadNewAttachments(savedNote.id, attachments)
-
-      const res = await fetch(`${API_BASE}/${savedNote.id}/summarize`, {
-        method: 'POST', headers: { 'Authorization': `Bearer ${token}` },
-      })
+      const res = await fetch(`${API_BASE}/${savedNote.id}/summarize`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } })
       const data = await res.json()
       if (!data.success) throw new Error(data.message)
       const summary = data.data.summary
       setAiSummary(summary)
-
       await fetch(`${API_BASE}/${savedNote.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
@@ -295,9 +291,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
   /* 下载附件 */
   const handleDownload = async (att) => {
     try {
-      const res = await fetch(`${API_BASE}/${noteId}/attachments/${att.id}`, {
-        headers: { 'Authorization': `Bearer ${token}` },
-      })
+      const res = await fetch(`${API_BASE}/${noteId}/attachments/${att.id}`, { headers: { 'Authorization': `Bearer ${token}` } })
       const data = await res.json()
       if (!data.success) return
       const link = document.createElement('a')
@@ -307,29 +301,34 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
     } catch { setError('下载失败') }
   }
 
-  /* 复制AI总结 */
-  const handleCopySummary = () => {
-    navigator.clipboard.writeText(aiSummary).catch(() => {})
+  /* 返回 - 检查未保存 */
+  const handleBack = () => {
+    if (hasUnsavedChanges) {
+      if (confirm('有未保存的修改，确定要退出吗？')) onBack()
+    } else {
+      onBack()
+    }
   }
+
+  /* 复制AI总结 */
+  const handleCopySummary = () => { navigator.clipboard.writeText(aiSummary).catch(() => {}) }
 
   return (
     <div style={{
-      display: 'flex', flexDirection: 'column',
-      height: '100vh',
-      height: '100dvh',
-      overflow: 'hidden',
-      position: 'fixed',
-      top: 0, left: 0, right: 0, bottom: 0,
-      background: 'var(--bg)',
-      zIndex: 100,
+      display: 'flex', flexDirection: 'column', height: '100vh', height: '100dvh',
+      overflow: 'hidden', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+      background: 'var(--bg)', zIndex: 100,
     }}>
+      {/* Toast */}
+      {toast && <Toast message={toast} onDone={() => setToast('')} />}
+
       {/* 顶部导航栏 */}
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '12px 16px', borderBottom: '1px solid var(--card-border)',
         background: 'var(--card-bg)', flexShrink: 0, zIndex: 10,
       }}>
-        <button onClick={onBack} style={{
+        <button onClick={handleBack} style={{
           display: 'flex', alignItems: 'center', gap: '2px',
           background: 'none', border: 'none', color: 'var(--primary)',
           fontSize: '14px', cursor: 'pointer', padding: '4px 0', fontWeight: 500,
@@ -341,8 +340,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
             <button onClick={onDelete} style={{
               display: 'flex', alignItems: 'center', gap: '4px',
               padding: '6px 12px', borderRadius: '20px', border: 'none',
-              background: '#FEF2F2', color: '#DC2626', fontSize: '12px',
-              fontWeight: 600, cursor: 'pointer',
+              background: '#FEF2F2', color: '#DC2626', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
             }}>
               <Trash2 size={12} /> 删除
             </button>
@@ -370,12 +368,11 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
       {/* 可滚动编辑区域 */}
       <div style={{
         flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
-        /* 始终预留工具栏高度，键盘打开时额外预留键盘高度 */
         paddingBottom: isKeyboardOpen ? `${keyboardHeight + 56}px` : '56px',
       }}>
         <div style={{ maxWidth: '600px', margin: '0 auto', padding: '16px' }}>
 
-          {/* AI速览区域 */}
+          {/* AI速览区域 - 关闭改为折叠 */}
           {showAiSummary && (
             <div style={{
               marginBottom: '16px', borderRadius: '12px', overflow: 'hidden',
@@ -384,41 +381,40 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
             }}>
               <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                padding: '10px 14px', borderBottom: '1px solid #FDE68A',
-              }}>
+                padding: '10px 14px', borderBottom: aiCollapsed ? 'none' : '1px solid #FDE68A',
+                cursor: 'pointer',
+              }} onClick={() => setAiCollapsed(!aiCollapsed)}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: '#D97706' }}>
                   <Sparkles size={14} /> AI速览
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   {aiSummary && !isSummarizing && (
-                    <button onClick={handleCopySummary} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D97706', padding: '2px' }}>
+                    <button onClick={(e) => { e.stopPropagation(); handleCopySummary() }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D97706', padding: '2px' }}>
                       <Copy size={14} />
                     </button>
                   )}
-                  <button onClick={() => setShowAiSummary(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D97706', padding: '2px' }}>
-                    <X size={14} />
-                  </button>
+                  {aiCollapsed ? <ChevronDown size={14} style={{ color: '#D97706' }} /> : <ChevronUp size={14} style={{ color: '#D97706' }} />}
                 </div>
               </div>
-              {isSummarizing ? (
-                <SkeletonLoader />
-              ) : aiSummary ? (
-                <div className="ai-summary-content" style={{ padding: '14px 16px', fontSize: '13px', lineHeight: '1.8', color: '#92400E' }}>
-                  <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                    {aiSummary}
-                  </ReactMarkdown>
-                </div>
-              ) : (
-                <div style={{ padding: '20px 16px', textAlign: 'center', color: '#D97706', fontSize: '13px' }}>
-                  <Sparkles size={20} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.5 }} />
-                  点击底部 AI速览 按钮生成总结
-                </div>
+              {!aiCollapsed && (
+                isSummarizing ? (
+                  <SkeletonLoader />
+                ) : aiSummary ? (
+                  <div className="ai-summary-content" style={{ padding: '14px 16px', fontSize: '13px', lineHeight: '1.8', color: '#92400E' }}>
+                    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>{aiSummary}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <div style={{ padding: '20px 16px', textAlign: 'center', color: '#D97706', fontSize: '13px' }}>
+                    <Sparkles size={20} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.5 }} />
+                    点击底部 AI速览 按钮生成总结
+                  </div>
+                )
               )}
             </div>
           )}
 
           {/* 标题 */}
-          <input type="text" value={title} onChange={e => setTitle(e.target.value)} placeholder="标题" style={{
+          <input type="text" value={title} onChange={handleTitleChange} placeholder="标题" style={{
             width: '100%', border: 'none', background: 'transparent',
             fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)',
             outline: 'none', padding: '4px 0', marginBottom: '8px',
@@ -427,7 +423,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
           {/* 课程关联 */}
           {courses.length > 0 && (
             <div style={{ marginBottom: '12px' }}>
-              <select value={courseName} onChange={e => setCourseName(e.target.value)} style={{
+              <select value={courseName} onChange={handleCourseChange} style={{
                 width: '100%', maxWidth: '240px', padding: '6px 12px',
                 border: '1px solid var(--card-border)', borderRadius: '8px',
                 background: 'var(--bg)', color: 'var(--text-primary)',
@@ -439,28 +435,20 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
             </div>
           )}
 
-          {/* 纯文本 textarea */}
+          {/* textarea */}
           {isLoadingNote ? (
             <div style={{ minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <Loader size={18} style={{ animation: 'spin 1s linear infinite', color: 'var(--text-muted)' }} />
             </div>
           ) : (
-            <textarea
-              ref={textareaRef}
-              value={content}
-              onChange={e => setContent(e.target.value)}
-              placeholder="开始记录..."
-              style={{
-                width: '100%', minHeight: '200px', border: 'none', background: 'transparent',
-                color: 'var(--text-primary)', fontSize: '15px', lineHeight: '1.8',
-                resize: 'none', outline: 'none', fontFamily: 'inherit',
-                caretColor: 'var(--primary)',
-                WebkitAppearance: 'none',
-              }}
-            />
+            <textarea value={content} onChange={handleContentChange} placeholder="开始记录..." style={{
+              width: '100%', minHeight: '200px', border: 'none', background: 'transparent',
+              color: 'var(--text-primary)', fontSize: '15px', lineHeight: '1.8',
+              resize: 'none', outline: 'none', fontFamily: 'inherit', caretColor: 'var(--primary)',
+            }} />
           )}
 
-          {/* 图片附件 - 全宽圆角 */}
+          {/* 图片附件 */}
           {attachments.filter(a => isImage(a.mimetype)).map(att => (
             <div key={att.id} style={{ position: 'relative', margin: '12px 0', borderRadius: '14px', overflow: 'hidden', border: '1px solid var(--card-border)' }}>
               <img src={`data:${att.mimetype};base64,${att.data}`} alt={att.filename} style={{ width: '100%', display: 'block' }} />
@@ -472,7 +460,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
             </div>
           ))}
 
-          {/* 非图片附件 - 文件卡片 */}
+          {/* 非图片附件 */}
           {attachments.filter(a => !isImage(a.mimetype)).map(att => {
             const ext = getFileExt(att.filename)
             const color = getFileColor(ext)
@@ -480,14 +468,10 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
               <div key={att.id} className="file-card">
                 <div className="file-card-icon" style={{ background: color }}>{ext}</div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: '13px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {att.filename}
-                  </div>
+                  <div style={{ fontSize: '13px', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{att.filename}</div>
                   <div style={{ fontSize: '11px', color: 'var(--text-muted)', marginTop: '2px' }}>{formatSize(att.size)}</div>
                 </div>
-                {!att.isNew && (
-                  <Download size={16} style={{ cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0 }} onClick={() => handleDownload(att)} />
-                )}
+                {!att.isNew && <Download size={16} style={{ cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0 }} onClick={() => handleDownload(att)} />}
                 <X size={16} style={{ cursor: 'pointer', color: 'var(--text-muted)', flexShrink: 0 }} onClick={() => handleRemoveAttachment(att)} />
               </div>
             )
@@ -495,32 +479,25 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
         </div>
       </div>
 
-      {/* 底部工具栏 - 3个按钮，通过visualViewport适配键盘 */}
+      {/* 底部工具栏 */}
       <div style={{
-        position: 'fixed',
-        left: 0, right: 0,
-        bottom: isKeyboardOpen ? keyboardHeight : 0,
-        zIndex: 50,
+        position: 'fixed', left: 0, right: 0,
+        bottom: isKeyboardOpen ? keyboardHeight : 0, zIndex: 50,
         display: 'flex', alignItems: 'center', justifyContent: 'space-around',
-        padding: '8px 12px',
-        paddingBottom: `calc(8px + env(safe-area-inset-bottom, 0px))`,
-        borderTop: '1px solid var(--card-border)',
-        background: 'var(--card-bg)',
+        padding: '8px 12px', paddingBottom: 'calc(8px + env(safe-area-inset-bottom, 0px))',
+        borderTop: '1px solid var(--card-border)', background: 'var(--card-bg)',
         transition: 'bottom 0.1s ease-out',
       }}>
         <button className="note-toolbar-btn" onClick={handleSummarize} disabled={isSummarizing}
           style={{ color: isSummarizing ? 'var(--text-muted)' : '#F59E0B' }}>
-          <Sparkles size={20} />
-          <span>AI速览</span>
+          <Sparkles size={20} /><span>AI速览</span>
         </button>
         <button className="note-toolbar-btn" onClick={() => imageInputRef.current?.click()}>
-          <Camera size={20} />
-          <span>图片</span>
+          <Camera size={20} /><span>图片</span>
         </button>
         <input ref={imageInputRef} type="file" accept="image/*" multiple onChange={handleAddFiles} style={{ display: 'none' }} />
         <button className="note-toolbar-btn" onClick={() => fileInputRef.current?.click()}>
-          <FileUp size={20} />
-          <span>文件</span>
+          <FileUp size={20} /><span>文件</span>
         </button>
         <input ref={fileInputRef} type="file" multiple onChange={handleAddFiles} style={{ display: 'none' }} />
       </div>
@@ -536,6 +513,8 @@ function NotesPage() {
   const [courses, setCourses] = useState([])
   const [loading, setLoading] = useState(true)
   const [editingNote, setEditingNote] = useState(null)
+  const [filterCourse, setFilterCourse] = useState('')
+  const [showFilter, setShowFilter] = useState(false)
 
   const loadData = useCallback(async () => {
     if (!token) { setLoading(false); return }
@@ -554,6 +533,11 @@ function NotesPage() {
   }, [token])
 
   useEffect(() => { loadData() }, [loadData])
+
+  /* 筛选后的随记 */
+  const filteredNotes = filterCourse
+    ? notes.filter(n => n.course_name === filterCourse)
+    : notes
 
   if (!user) {
     return (
@@ -594,25 +578,87 @@ function NotesPage() {
           <h1 className="page-title">随记</h1>
           <p className="page-desc">记录课程要点，AI帮你速览</p>
         </div>
-        <button onClick={() => setEditingNote({})} style={{
-          width: '40px', height: '40px', borderRadius: '50%', border: 'none',
-          background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', boxShadow: '0 2px 8px rgba(79,70,229,0.3)',
-        }}><Plus size={20} /></button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* 筛选按钮 */}
+          {courses.length > 0 && (
+            <div style={{ position: 'relative' }}>
+              <button onClick={() => setShowFilter(!showFilter)} style={{
+                width: '36px', height: '36px', borderRadius: '50%', border: '1px solid var(--card-border)',
+                background: showFilter ? 'var(--primary)' : 'var(--card-bg)',
+                color: showFilter ? '#fff' : 'var(--text-secondary)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+              }}>
+                <Filter size={16} />
+              </button>
+              {showFilter && (
+                <div style={{
+                  position: 'absolute', top: '42px', right: 0, zIndex: 20,
+                  background: 'var(--card-bg)', border: '1px solid var(--card-border)',
+                  borderRadius: '12px', padding: '8px', minWidth: '160px',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
+                }}>
+                  <div onClick={() => { setFilterCourse(''); setShowFilter(false) }}
+                    style={{ padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+                      background: filterCourse === '' ? 'rgba(79,70,229,0.1)' : 'transparent',
+                      color: filterCourse === '' ? 'var(--primary)' : 'var(--text-secondary)',
+                      display: 'flex', alignItems: 'center', gap: '6px',
+                    }}>
+                    {filterCourse === '' && <Check size={14} />} 全部随记
+                  </div>
+                  {courses.map(c => (
+                    <div key={c} onClick={() => { setFilterCourse(c); setShowFilter(false) }}
+                      style={{ padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
+                        background: filterCourse === c ? 'rgba(79,70,229,0.1)' : 'transparent',
+                        color: filterCourse === c ? 'var(--primary)' : 'var(--text-secondary)',
+                        display: 'flex', alignItems: 'center', gap: '6px',
+                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                      }}>
+                      {filterCourse === c && <Check size={14} />} {c}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          <button onClick={() => setEditingNote({})} style={{
+            width: '40px', height: '40px', borderRadius: '50%', border: 'none',
+            background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', boxShadow: '0 2px 8px rgba(79,70,229,0.3)',
+          }}><Plus size={20} /></button>
+        </div>
       </div>
+
+      {/* 筛选提示 */}
+      {filterCourse && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px',
+          padding: '6px 12px', background: 'rgba(79,70,229,0.06)', borderRadius: '8px',
+          fontSize: '13px', color: 'var(--primary)',
+        }}>
+          <Filter size={14} /> 筛选: {filterCourse}
+          <span style={{ cursor: 'pointer', marginLeft: 'auto' }} onClick={() => setFilterCourse('')}>
+            <X size={14} />
+          </span>
+        </div>
+      )}
+
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
           <Loader size={20} style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }} />
         </div>
-      ) : notes.length === 0 ? (
+      ) : filteredNotes.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
           <FileText size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
-          <p style={{ fontSize: '15px', fontWeight: 500, marginBottom: '8px', color: 'var(--text-secondary)' }}>还没有随记</p>
-          <p style={{ fontSize: '13px' }}>点击右上角 + 创建第一条随记</p>
+          <p style={{ fontSize: '15px', fontWeight: 500, marginBottom: '8px', color: 'var(--text-secondary)' }}>
+            {filterCourse ? '该课程暂无随记' : '还没有随记'}
+          </p>
+          <p style={{ fontSize: '13px' }}>
+            {filterCourse ? '点击筛选图标查看全部' : '点击右上角 + 创建第一条随记'}
+          </p>
         </div>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
-          {notes.map(note => <NoteCard key={note.id} note={note} onClick={() => setEditingNote(note)} />)}
+          {filteredNotes.map(note => <NoteCard key={note.id} note={note} onClick={() => setEditingNote(note)} />)}
         </div>
       )}
     </div>

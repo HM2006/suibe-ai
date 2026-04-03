@@ -164,10 +164,23 @@ function GradesPage() {
     const scores = filteredGrades.map((g) => typeof g.score === 'number' ? g.score : (g.scoreNum || 0))
     const totalCredits = filteredGrades.reduce((sum, g) => sum + g.credit, 0)
     const validScores = scores.filter(s => typeof s === 'number' && s > 0)
+
+    /* 算术平均分 */
     const avgScore = validScores.length > 0
       ? (validScores.reduce((a, b) => a + b, 0) / validScores.length).toFixed(2)
       : '0.00'
-    const maxScore = validScores.length > 0 ? Math.max(...validScores) : 0
+
+    /* 加权平均分（按学分加权） */
+    let weightedSum = 0
+    let weightedCredits = 0
+    filteredGrades.forEach(g => {
+      const s = typeof g.score === 'number' ? g.score : (g.scoreNum || 0)
+      if (s > 0 && g.credit > 0) {
+        weightedSum += s * g.credit
+        weightedCredits += g.credit
+      }
+    })
+    const weightedAvg = weightedCredits > 0 ? (weightedSum / weightedCredits).toFixed(2) : '0.00'
 
     /* 如果是真实数据且显示全部学期，使用后端返回的GPA */
     let gpa
@@ -184,7 +197,7 @@ function GradesPage() {
       displayTotalCredits = totalCredits
     }
 
-    return { avgScore, maxScore, gpa, totalCredits: displayTotalCredits, count: filteredGrades.length }
+    return { avgScore, weightedAvg, gpa, totalCredits: displayTotalCredits, count: filteredGrades.length }
   }, [filteredGrades, dataSource, selectedSemester, realGPA, realTotalCredits])
 
   /* 成绩分布数据 */
@@ -263,11 +276,11 @@ function GradesPage() {
         </div>
         <div className="stat-card">
           <div className="stat-value">{stats.avgScore}</div>
-          <div className="stat-label">平均分</div>
+          <div className="stat-label">算术均分</div>
         </div>
         <div className="stat-card">
-          <div className="stat-value">{stats.maxScore}</div>
-          <div className="stat-label">最高分</div>
+          <div className="stat-value">{stats.weightedAvg}</div>
+          <div className="stat-label">加权均分</div>
         </div>
         <div className="stat-card">
           <div className="stat-value">{stats.totalCredits}</div>

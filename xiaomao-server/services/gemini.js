@@ -6,7 +6,7 @@
 
 const axios = require('axios');
 
-const GEMINI_API_KEY = process.env.GEMINI_API_KEY || 'AIzaSyDAOsu4OQi-jY4ju5TkuLoMRzz5mEy19KQ';
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
 const GEMINI_API_BASE = 'https://generativelanguage.googleapis.com/v1beta';
 

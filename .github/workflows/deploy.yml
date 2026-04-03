@@ -46,6 +46,7 @@ jobs:
             cat > .env << ENVEOF
             HIAGENT_API_BASE=${{ secrets.HIAGENT_API_BASE }}
             HIAGENT_API_KEY=${{ secrets.HIAGENT_API_KEY }}
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             ENVEOF
 
             # 安装后端依赖

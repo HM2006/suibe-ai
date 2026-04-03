@@ -1833,12 +1833,8 @@ select {
   }
 
   .grade-row {
-    grid-template-columns: 1.5fr 1fr 1fr 1fr;
-    font-size: 13px;
-  }
-
-  .grade-row .grade-credit {
-    display: none;
+    grid-template-columns: 1.5fr 0.8fr 1fr 1fr 0.8fr;
+    font-size: 12px;
   }
 
   .page-header {

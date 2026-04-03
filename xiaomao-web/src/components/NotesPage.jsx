@@ -315,7 +315,13 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
   return (
     <div style={{
       display: 'flex', flexDirection: 'column',
-      height: '100vh', height: '100dvh',
+      height: '100vh',
+      height: '100dvh',
+      overflow: 'hidden',
+      position: 'fixed',
+      top: 0, left: 0, right: 0, bottom: 0,
+      background: 'var(--bg)',
+      zIndex: 100,
     }}>
       {/* 顶部导航栏 */}
       <div style={{
@@ -364,7 +370,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
       {/* 可滚动编辑区域 */}
       <div style={{
         flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
-        /* 键盘打开时，让内容区缩小，底栏可见 */
+        /* 始终预留工具栏高度，键盘打开时额外预留键盘高度 */
         paddingBottom: isKeyboardOpen ? `${keyboardHeight + 56}px` : '56px',
       }}>
         <div style={{ maxWidth: '600px', margin: '0 auto', padding: '16px' }}>

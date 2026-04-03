@@ -388,59 +388,82 @@ class EduProxy {
       let moocCourses = [];
       try {
         console.log('[EduProxy] 正在提取MOOC课程信息...');
-        /* 点击"全部课程"tab */
-        const allCourseTab = await this.page.$('li[data-toggle="tab"]:has(a:has-text("全部课程"))')
-          || await this.page.$('a:has-text("全部课程")');
+        /* 点击"全部课程"tab - 使用Puppeteer兼容的选择器 */
+        /* 尝试多种选择器匹配tab按钮 */
+        let allCourseTab = null;
+        const tabSelectors = [
+          'li[data-toggle="tab"] a',  // Bootstrap tab结构
+          'a[href*="all"]',
+          'ul.nav-tabs li:nth-child(2) a',
+          'ul.nav-tabs li:last-child a',
+        ];
+        for (const sel of tabSelectors) {
+          const el = await this.page.$(sel);
+          if (el) {
+            const text = await this.page.evaluate(e => e.textContent.trim(), el);
+            if (text.includes('全部课程')) {
+              allCourseTab = el;
+              break;
+            }
+          }
+        }
         if (allCourseTab) {
           await allCourseTab.click();
           await this._delay(3000);
 
-          /* 从"全部课程"tab的HTML中提取含MOOC/备注的课程 */
+          /* 从"全部课程"tab的HTML中提取含MOOC的课程信息 */
           const allCourseHtml = await this.page.content();
           const $all = cheerio.load(allCourseHtml);
 
-          /* 查找所有包含"备注"的单元格 */
-          $all('td, div, span').each((i, el) => {
-            const text = $all(el).text().trim();
-            if (!text.includes('备注') && !text.includes('MOOC') && !text.includes('mooc')) return;
+          /* 用正则从完整HTML中提取所有MOOC课程条目 */
+          /* 课程信息格式: 课程名（MOOC） 课程代码 ... 备注：... */
+          const moocPattern = /([\u4e00-\u9fa5（）：:、]+?（MOOC）)\s+[A-Z]\d{10,}[\w-]*\s+[^\n]*?备注[：:]\s*([^\n]+)/g;
+          const seen = new Set();
+          let moocMatch;
 
-            /* 检查是否为MOOC课程 */
-            if (!text.includes('MOOC') && !text.includes('mooc')) return;
+          while ((moocMatch = moocPattern.exec(allCourseHtml)) !== null) {
+            const fullName = moocMatch[1].trim();
+            const remarkText = moocMatch[2].trim();
 
-            /* 提取课程名 */
-            let courseName = '';
-            const nameMatch = text.match(/（选）?([^\s]+(?:沟通|谈判|自我推销|职场|英语|体育|超星|智慧树|学堂)[^\s]*)/);
-            if (nameMatch) {
-              courseName = nameMatch[1].replace(/[A-Z]\d{10,}[\w-]*/g, '').replace(/（MOOC）/gi, '').replace(/（\d+）/g, '').trim();
-            }
-            if (!courseName) {
-              /* 通用提取：取第一个中文名称 */
-              const genericMatch = text.match(/（选）?([\u4e00-\u9fa5]{2,30}（MOOC）)/);
-              if (genericMatch) courseName = genericMatch[1].replace(/（MOOC）/gi, '').trim();
-            }
-            if (!courseName) return;
+            /* 去重 */
+            if (seen.has(fullName)) continue;
+            seen.add(fullName);
+
+            /* 提取课程名（去掉"（选）"和"（MOOC）"） */
+            let courseName = fullName.replace(/^（选）/, '').replace(/（MOOC）$/i, '').trim();
+            if (!courseName) continue;
 
             /* 匹配平台 */
             let platform = { name: '其他平台', url: '' };
-            if (text.includes('学堂在线') || text.includes('雨课堂')) {
+            const fullText = fullName + ' ' + remarkText;
+            if (fullText.includes('学堂在线') || fullText.includes('雨课堂')) {
               platform = { name: '雨课堂', url: 'https://suibe.yuketang.cn/' };
-            } else if (text.includes('超星尔雅') || text.includes('超星')) {
+            } else if (fullText.includes('超星尔雅') || fullText.includes('超星')) {
               platform = { name: '学习通（超星尔雅）', url: 'https://i.chaoxing.com' };
-            } else if (text.includes('智慧树')) {
+            } else if (fullText.includes('智慧树')) {
               platform = { name: '智慧树', url: 'https://www.zhihuishu.com/' };
             }
 
             /* 提取备注链接 */
             let remarkUrl = '';
-            const urlMatch = text.match(/(https?:\/\/[^\s"'）)]+)/);
+            const urlMatch = fullText.match(/(https?:\/\/[^\s"'<>)]+)/);
             if (urlMatch) remarkUrl = urlMatch[1];
 
             moocCourses.push({ name: courseName, platform: platform.name, platformUrl: platform.url, remarkUrl });
-          });
+          }
 
           /* 切回课表tab */
-          const scheduleTab = await this.page.$('li[data-toggle="tab"]:has(a:has-text("课表"))')
-            || await this.page.$('a:has-text("课表")');
+          let scheduleTab = null;
+          for (const sel of tabSelectors) {
+            const el = await this.page.$(sel);
+            if (el) {
+              const text = await this.page.evaluate(e => e.textContent.trim(), el);
+              if (text.includes('课表')) {
+                scheduleTab = el;
+                break;
+              }
+            }
+          }
           if (scheduleTab) await scheduleTab.click();
           await this._delay(1000);
         }

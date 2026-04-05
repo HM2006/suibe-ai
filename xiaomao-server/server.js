@@ -33,9 +33,16 @@ const PORT = process.env.PORT || 3001;
 
 // ==================== 中间件配置 ====================
 
-// CORS跨域配置 - 允许前端开发服务器访问
+// CORS跨域配置 - 允许前端开发服务器和App访问
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173'],
+  origin: [
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+    'https://localhost',
+    'http://localhost',
+    'capacitor://localhost',
+    'ionic://localhost',
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-CSRF-Token'],
   credentials: true // 允许携带cookie

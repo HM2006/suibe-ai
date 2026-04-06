@@ -7,6 +7,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Clock, MapPin, User, Calendar } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
+import { API } from '../config/api'
 
 /* 星期配置 */
 const weekDays = ['周一', '周二', '周三', '周四', '周五']
@@ -145,7 +146,7 @@ function SchedulePage() {
     const loadData = async () => {
       if (!token) return
       try {
-        const res = await fetch('/api/user/profile', {
+        const res = await fetch(`${API.user}/profile`, {
           headers: { 'Authorization': `Bearer ${token}` },
         })
         if (!res.ok) return

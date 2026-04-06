@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { BookOpen, ExternalLink, Clock, AlertTriangle, Loader, RefreshCw } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
+import { API } from '../config/api'
 
 const MOOC_DEADLINE = new Date('2026-06-21T23:59:59+08:00')
 
@@ -49,7 +50,7 @@ function MoocPage() {
     if (!user?.id || !token) { setLoading(false); return }
     setLoading(true); setError('')
     try {
-      const res = await fetch(`/api/edu/mooc?userId=${user.id}`, {
+      const res = await fetch(`${API.edu}/mooc?userId=${user.id}`, {
         headers: { 'Authorization': `Bearer ${token}` },
       })
       const data = await res.json()

@@ -11,9 +11,7 @@ import {
   Calendar, BookOpen, Activity, Clock, UserPlus,
   Trash2, Eye, Server, Database, Cpu
 } from 'lucide-react'
-
-/* API基础路径 */
-const API_BASE = '/api/admin'
+import { API } from '../config/api'
 
 /**
  * 格式化日期时间
@@ -78,7 +76,7 @@ function UserStatsPanel({ userId, username, onBack }) {
       setLoading(true)
       setError('')
       try {
-        const res = await fetch(`${API_BASE}/users/${userId}/stats`, {
+        const res = await fetch(`${API.admin}/users/${userId}/stats`, {
           headers: { 'Authorization': `Bearer ${token}` },
         })
         const data = await res.json()
@@ -265,7 +263,7 @@ function AdminPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await fetch(`${API_BASE}/users`, {
+      const res = await fetch(`${API.admin}/users`, {
         headers: { 'Authorization': `Bearer ${token}` },
       })
       const data = await res.json()
@@ -285,7 +283,7 @@ function AdminPage() {
   const deleteUser = async (userId, username) => {
     if (!confirm(`确定要删除用户 "${username}" 吗？此操作不可恢复。`)) return
     try {
-      const res = await fetch(`${API_BASE}/users/${userId}`, {
+      const res = await fetch(`${API.admin}/users/${userId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` },
       })

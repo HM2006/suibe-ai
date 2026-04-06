@@ -7,10 +7,7 @@ import { useNavigate } from 'react-router-dom'
 import { useUser } from '../contexts/UserContext'
 import { User, LogIn, LogOut, Settings, ChevronRight, Shield, Calendar, BarChart3, KeyRound, ArrowLeft, Link2, Unplug, Loader, CheckCircle, Camera, RefreshCw } from 'lucide-react'
 import EduLoginModal from './EduLoginModal'
-
-/* API基础路径 */
-const API_BASE = '/api/user'
-const EDU_API_BASE = '/api/edu'
+import { API } from '../config/api'
 
 /**
  * 登录表单组件
@@ -211,7 +208,7 @@ function ChangePasswordForm({ onBack }) {
     }
     setLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/change-password`, {
+      const res = await fetch(`${API.user}/change-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -331,7 +328,7 @@ function UserProfile() {
   /* 更新头像 */
   const handleAvatarChange = async (emoji) => {
     try {
-      const res = await fetch(`${API_BASE}/avatar`, {
+      const res = await fetch(`${API.user}/avatar`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -360,7 +357,7 @@ function UserProfile() {
     try {
       /* 先获取课表 */
       try {
-        const res = await fetch(`${EDU_API_BASE}/schedule?userId=${user.id}`)
+        const res = await fetch(`${API.edu}/schedule?userId=${user.id}`)
         if (res.ok) {
           const data = await res.json()
           if (data.success) { scheduleOk = true }
@@ -371,7 +368,7 @@ function UserProfile() {
 
       /* 再获取成绩 */
       try {
-        const res = await fetch(`${EDU_API_BASE}/grades?userId=${user.id}`)
+        const res = await fetch(`${API.edu}/grades?userId=${user.id}`)
         if (res.ok) {
           const data = await res.json()
           if (data.success) { gradesOk = true }
@@ -382,7 +379,7 @@ function UserProfile() {
 
       /* 获取完毕，关闭浏览器 */
       try {
-        await fetch(`${EDU_API_BASE}/logout?userId=${user.id}`, { method: 'POST' })
+        await fetch(`${API.edu}/logout?userId=${user.id}`, { method: 'POST' })
       } catch (err) { /* ignore */ }
 
       if (scheduleOk || gradesOk) {
@@ -403,7 +400,7 @@ function UserProfile() {
   /* 断开教务系统连接 */
   const handleEduDisconnect = useCallback(async () => {
     try {
-      await fetch(`${EDU_API_BASE}/logout?userId=${user.id}`, { method: 'POST' })
+      await fetch(`${API.edu}/logout?userId=${user.id}`, { method: 'POST' })
     } catch (err) {
       console.warn('[UserPage] 断开教务系统失败:', err)
     }

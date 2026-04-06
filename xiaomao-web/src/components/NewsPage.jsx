@@ -15,8 +15,7 @@ import {
   ExternalLink,
   Paperclip,
 } from 'lucide-react'
-
-const NEWS_API = '/api/campus/news'
+import { API } from '../config/api'
 
 /* 新闻分类配置 */
 const categories = [
@@ -118,7 +117,7 @@ function NewsPage() {
     if (showLoading) setIsLoading(true)
     setIsRefreshing(true)
     try {
-      const res = await fetch(NEWS_API)
+      const res = await fetch(`${API.campus}/news`)
       const data = await res.json()
       if (data.success && data.data && data.data.news && data.data.news.length > 0) {
         /* 将实时新闻转换为组件格式 */
@@ -167,7 +166,7 @@ function NewsPage() {
 
     // 尝试从API获取详情
     try {
-      const res = await fetch(`${NEWS_API}/${news.id}`)
+      const res = await fetch(`${API.campus}/news/${news.id}`)
       if (res.ok) {
         const data = await res.json()
         if (data.success && data.data) {
@@ -257,7 +256,7 @@ function NewsPage() {
               >
                 {hasImage ? (
                   /* 带图片的新闻卡片 */
-                  <div className="news-card-with-image">
+                  <div className="news-card-with-image" style={{ justifyContent: 'flex-end' }}>
                     <img
                       className="news-card-image"
                       src={news.imageUrl}

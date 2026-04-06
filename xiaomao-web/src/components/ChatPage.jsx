@@ -7,6 +7,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import { useUser } from '../contexts/UserContext'
+import { API } from '../config/api'
 import {
   Send,
   Map,
@@ -40,7 +41,7 @@ const getLocalResponses = (token) => ({
   '帮我查看今天的课表': async (tkn) => {
       try {
         if (!tkn) return '## 📅 课表查询\n\n请先登录后查看课表。'
-        const res = await fetch('/api/user/profile', {
+        const res = await fetch(`${API.user}/profile`, {
           headers: { 'Authorization': `Bearer ${tkn}` }
       })
       if (!res.ok) return '## 📅 课表查询\n\n获取课表数据失败，请稍后重试。'
@@ -81,7 +82,7 @@ const getLocalResponses = (token) => ({
   '帮我查询本学期成绩': async (tkn) => {
       try {
         if (!tkn) return '## 📊 成绩查询\n\n请先登录后查看成绩。'
-        const res = await fetch('/api/user/profile', {
+        const res = await fetch(`${API.user}/profile`, {
           headers: { 'Authorization': `Bearer ${tkn}` }
       })
       if (!res.ok) return '## 📊 成绩查询\n\n获取成绩数据失败，请稍后重试。'
@@ -123,7 +124,7 @@ const getLocalResponses = (token) => ({
   },
   '最近有什么校园新闻？': async () => {
     try {
-      const res = await fetch('/api/campus/news')
+      const res = await fetch(`${API.campus}/news`)
       if (!res.ok) return '## 📰 校园资讯\n\n获取新闻失败，请稍后重试。'
       const data = await res.json()
       const news = data.data?.news || data.news || []
@@ -175,7 +176,7 @@ function ChatPage() {
 
   /* 自动滚动到底部 */
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    if (messages.length > 0 || isLoading) { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }
   }, [messages, isLoading])
 
   /* 发送消息 */
@@ -209,7 +210,7 @@ function ChatPage() {
       ])
 
       /* 调用后端API */
-      const response = await fetch('/api/chat', {
+      const response = await fetch(`${API.chat}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

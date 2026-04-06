@@ -1,8 +1,10 @@
 /* ========================================
-   小贸 - 布局组件
-   包含左侧导航栏（桌面端）和底部导航栏（移动端）
+   小贸 - 布局组件（整合版）
+   桌面端：左侧导航栏（完整10项）
+   移动端：底部导航栏（5项核心 + 更多功能入口）
    ======================================== */
-import { NavLink, useLocation, Link } from 'react-router-dom'
+import { useState } from 'react'
+import { NavLink, useLocation, useNavigate, Link } from 'react-router-dom'
 import {
   MessageSquare,
   Map,
@@ -16,11 +18,13 @@ import {
   FileText,
   GraduationCap,
   DoorOpen,
+  Grid2X2,
+  X,
 } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
 
-/* 导航菜单配置 */
-const navItems = [
+/* 侧边栏完整导航（桌面端10项） */
+const sidebarNavItems = [
   { path: '/chat', label: 'AI对话', icon: MessageSquare },
   { path: '/campus/map', label: '校园导航', icon: Map },
   { path: '/campus/schedule', label: '课表', icon: Calendar },
@@ -31,6 +35,23 @@ const navItems = [
   { path: '/mooc', label: 'MOOC', icon: GraduationCap },
   { path: '/empty-rooms', label: '空教室', icon: DoorOpen },
   { path: '/scholarship', label: '奖学金', icon: Award },
+]
+
+/* 底部导航（移动端5项核心 + 更多） */
+const bottomNavItems = [
+  { path: '/chat', label: 'AI对话', icon: MessageSquare },
+  { path: '/campus/map', label: '导航', icon: Map },
+  { path: '/campus/schedule', label: '课表', icon: Calendar },
+  { path: '/notes', label: '随记', icon: FileText },
+  { path: '/campus/news', label: '资讯', icon: Newspaper },
+]
+
+/* "更多"面板中的功能项（底部栏未直接展示的） */
+const moreNavItems = [
+  { path: '/campus/grades', label: '成绩查询', icon: BarChart3, desc: '查看各科成绩' },
+  { path: '/mooc', label: 'MOOC助手', icon: GraduationCap, desc: '网课学习管理' },
+  { path: '/empty-rooms', label: '空教室查询', icon: DoorOpen, desc: '快速找到空闲教室' },
+  { path: '/scholarship', label: '奖学金计算器', icon: Award, desc: '综合测评分数计算' },
 ]
 
 /* 根据当前路径获取页面标题 */
@@ -53,8 +74,16 @@ function getPageTitle(pathname) {
 
 function Layout({ children }) {
   const location = useLocation()
+  const navigate = useNavigate()
   const { title, subtitle } = getPageTitle(location.pathname)
   const { user } = useUser()
+  const [showMore, setShowMore] = useState(false)
+
+  /* 点击"更多"中的功能项后自动关闭面板 */
+  const handleMoreNav = (path) => {
+    setShowMore(false)
+    navigate(path)
+  }
 
   return (
     <div className="app-container">
@@ -66,14 +95,14 @@ function Layout({ children }) {
             <Sparkles size={22} />
           </div>
           <div>
-            <div className="sidebar-title">小贸 <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-muted)', marginLeft: '4px' }}>v1.3.0</span></div>
+            <div className="sidebar-title">小贸 <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-muted)', marginLeft: '4px' }}>v1.4.0</span></div>
             <div className="sidebar-subtitle">校园AI助手</div>
           </div>
         </div>
 
         {/* 导航列表 */}
         <ul className="nav-list">
-          {navItems.map((item) => (
+          {sidebarNavItems.map((item) => (
             <li key={item.path} className="nav-item">
               <NavLink
                 to={item.path}
@@ -115,7 +144,7 @@ function Layout({ children }) {
                 }}>
                   {(user.nickname || user.username)[0].toUpperCase()}
                 </div>
-                <span style={{ fontSize: '13px' }}>{user.nickname || user.username}</span>
+                <span className="header-username">{user.nickname || user.username}</span>
               </div>
             ) : (
               <UserIcon size={20} />
@@ -132,7 +161,7 @@ function Layout({ children }) {
       {/* 移动端底部导航栏 */}
       <nav className="bottom-nav">
         <ul className="bottom-nav-list">
-          {navItems.map((item) => (
+          {bottomNavItems.map((item) => (
             <li key={item.path}>
               <NavLink
                 to={item.path}
@@ -145,8 +174,50 @@ function Layout({ children }) {
               </NavLink>
             </li>
           ))}
+
+          {/* 更多功能按钮 */}
+          <li>
+            <button
+              className={`bottom-nav-link more-btn ${showMore ? 'active' : ''}`}
+              onClick={() => setShowMore(true)}
+            >
+              <Grid2X2 className="nav-icon" />
+              <span>更多</span>
+            </button>
+          </li>
         </ul>
       </nav>
+
+      {/* 更多功能面板（移动端） */}
+      {showMore && (
+        <div className="more-panel-overlay" onClick={() => setShowMore(false)}>
+          <div className="more-panel" onClick={(e) => e.stopPropagation()}>
+            <div className="more-panel-header">
+              <span className="more-panel-title">更多功能</span>
+              <button className="more-panel-close" onClick={() => setShowMore(false)}>
+                <X size={20} />
+              </button>
+            </div>
+            <div className="more-panel-list">
+              {moreNavItems.map((item) => (
+                <button
+                  key={item.path}
+                  className="more-panel-item"
+                  onClick={() => handleMoreNav(item.path)}
+                >
+                  <div className="more-panel-item-icon">
+                    <item.icon size={20} />
+                  </div>
+                  <div className="more-panel-item-info">
+                    <div className="more-panel-item-label">{item.label}</div>
+                    <div className="more-panel-item-desc">{item.desc}</div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

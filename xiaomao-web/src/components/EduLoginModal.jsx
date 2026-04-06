@@ -8,8 +8,7 @@
    ======================================== */
 import { useState, useEffect, useRef } from 'react'
 import { X, QrCode, RefreshCw, CheckCircle, AlertCircle, Loader, LogIn } from 'lucide-react'
-
-const API_BASE = '/api/edu'
+import { API } from '../config/api'
 
 /* 请求超时时间（毫秒） */
 const QR_FETCH_TIMEOUT = 60000
@@ -56,7 +55,7 @@ function EduLoginModal({ isOpen, onClose, onLoginSuccess }) {
       /* 设置请求超时 */
       const timeoutId = setTimeout(() => controller.abort(), QR_FETCH_TIMEOUT)
 
-      const res = await fetch(`${API_BASE}/login/qr`, {
+      const res = await fetch(`${API.edu}/login/qr`, {
         signal: controller.signal,
       })
       clearTimeout(timeoutId)
@@ -98,7 +97,7 @@ function EduLoginModal({ isOpen, onClose, onLoginSuccess }) {
   const handleConfirmLogin = async () => {
     setConfirming(true)
     try {
-      const res = await fetch(`${API_BASE}/login/check`, {
+      const res = await fetch(`${API.edu}/login/check`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ timeout: 5000 }),

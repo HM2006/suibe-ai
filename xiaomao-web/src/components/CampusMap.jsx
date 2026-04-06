@@ -61,15 +61,17 @@ function CampusMap() {
     <div className="map-container" style={{ display: 'flex', flexDirection: 'column', position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: '#F8FAFC' }}>
 
       {/* 头部信息 */}
-      <div className="page-header" style={{ padding: '16px 20px', backgroundColor: '#fff', borderBottom: '1px solid #E2E8F0' }}>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', backgroundColor: '#fff', borderBottom: '1px solid #E2E8F0' }}>
+        <div>
         <h1 className="page-title" style={{ margin: 0, fontSize: '20px', color: '#0F172A' }}>校园导航</h1>
         <p className="page-desc" style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748B' }}>
-          SUIBE 松江校区 · 2D平面全景图 (上北下南)
+          查看各校园地点和路线
         </p>
+        </div>
       </div>
 
       {/* 搜索框 */}
-      <div className="map-search" style={{ padding: '12px 20px', backgroundColor: '#fff' }}>
+      <div className="map-search" style={{ padding: '0 20px 12px' }}>
         <div style={{ position: 'relative', display: 'flex' }}>
           <Search size={18} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94A3B8' }} />
           <input

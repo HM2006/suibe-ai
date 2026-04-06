@@ -22,6 +22,7 @@ import {
   Info,
 } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
+import { API } from '../config/api'
 
 /* 参评学期 */
 const TARGET_SEMESTER = '2025-2026-1'
@@ -228,7 +229,7 @@ function ScholarshipPage() {
       setLoading(true)
       setError(null)
       try {
-        const res = await fetch('/api/user/profile', {
+        const res = await fetch(`${API.user}/profile`, {
           headers: { 'Authorization': `Bearer ${token}` },
         })
         if (!res.ok) throw new Error('获取用户信息失败')

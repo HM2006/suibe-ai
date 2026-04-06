@@ -7,6 +7,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { TrendingUp, Award, BookOpen, BarChart3 } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
+import { API } from '../config/api'
 
 /* 模拟成绩数据 - 作为fallback保留 */
 const mockGradesData = [
@@ -123,7 +124,7 @@ function GradesPage() {
     const loadCachedGrades = async () => {
       if (!token) return
       try {
-        const res = await fetch('/api/user/profile', {
+        const res = await fetch(`${API.user}/profile`, {
           headers: { 'Authorization': `Bearer ${token}` },
         })
         if (!res.ok) return

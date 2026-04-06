@@ -1,16 +1,14 @@
 /* ========================================
-   小贸 - 用户上下文
-   管理用户登录状态、注册、登出等
+   小贸 - 用户上下文（整合版）
+   API路径从统一配置导入，兼容Web和原生App
    ======================================== */
 import { createContext, useContext, useState, useEffect, useCallback } from 'react'
+import { API } from '../config/api'
 
 const UserContext = createContext(null)
 
 /* Token存储键名 */
 const TOKEN_KEY = 'xiaomao_token'
-
-/* API基础路径 */
-const API_BASE = '/api/user'
 
 /**
  * 用户上下文Provider
@@ -24,7 +22,7 @@ export function UserProvider({ children }) {
   /* 获取用户信息 */
   const fetchProfile = useCallback(async (currentToken) => {
     try {
-      const res = await fetch(`${API_BASE}/profile`, {
+      const res = await fetch(`${API.user}/profile`, {
         headers: {
           'Authorization': `Bearer ${currentToken}`,
         },
@@ -70,7 +68,7 @@ export function UserProvider({ children }) {
 
   /* 登录 */
   const login = useCallback(async (username, password) => {
-    const res = await fetch(`${API_BASE}/login`, {
+    const res = await fetch(`${API.user}/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password }),
@@ -92,7 +90,7 @@ export function UserProvider({ children }) {
 
   /* 注册 */
   const register = useCallback(async (username, password, nickname) => {
-    const res = await fetch(`${API_BASE}/register`, {
+    const res = await fetch(`${API.user}/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ username, password, nickname }),

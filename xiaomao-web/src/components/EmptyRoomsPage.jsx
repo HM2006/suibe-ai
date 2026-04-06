@@ -226,7 +226,7 @@ function AiTab({ data, buildings, dates }) {
   }
 
   const start = () => {
-    setStarted(true); setStep(0); setSelectedDate(null); setSelectedPeriods([])
+    setStarted(true); setSelectedDate(null); setSelectedPeriods([])
     setMessages([])
     setTimeout(() => {
       addMsg({ role: 'ai', type: 'text', text: '你好！我是空教室查询助手 😊\n让我来帮你找到合适的空教室吧！' })
@@ -307,7 +307,7 @@ function AiTab({ data, buildings, dates }) {
               const dd = data.s[date]
               if (dd && dd[bn] && dd[bn][id] && !isFree(dd[bn][id], p)) ok = false
             })
-            if (ok) alts.push({ id, name: br[id][1], seats: br[id][0], building: bn, reason: `座位数${br[id][0]}座（要求${minSeats}+）`, fpCount: sortedPeriods.length })
+            if (ok) alts.push({ id, name: br[id][1], seats: br[id][0], building: bn, reason: `座位数${br[id][0]}座（要求${minSeats}+）`, freePeriodCount: sortedPeriods.length })
           })
         })
       }
@@ -319,11 +319,11 @@ function AiTab({ data, buildings, dates }) {
             const dd = data.s[date]
             const mask = (dd && dd[bn] && dd[bn][id]) || 0
             const fp = sortedPeriods.filter(p => isFree(mask, p))
-            if (fp.length) alts.push({ id, name: br[id][1], seats: br[id][0], building: bn, reason: `仅${fp.map(p => PERIODS[p]).join('、')}空闲`, fpCount: fp.length })
+            if (fp.length) alts.push({ id, name: br[id][1], seats: br[id][0], building: bn, reason: `仅${fp.map(p => PERIODS[p]).join('、')}空闲`, freePeriodCount: fp.length })
           })
         })
       }
-      alts.sort((a, b) => b.fpCount - a.fpCount || b.seats - a.seats)
+      alts.sort((a, b) => b.freePeriodCount - a.freePeriodCount || b.seats - a.seats)
       alts = alts.slice(0, 12)
     }
 

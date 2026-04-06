@@ -593,16 +593,23 @@ function NotesPage() {
     if (!token) { setLoading(false); return }
     setLoading(true)
     try {
-      const [notesRes, coursesRes] = await Promise.all([
-        fetch(API_BASE, { headers: { 'Authorization': `Bearer ${token}` } }),
-        fetch(`${API_BASE}/courses`, { headers: { 'Authorization': `Bearer ${token}` } }),
-      ])
+      const notesRes = await fetch(API_BASE, { headers: { 'Authorization': `Bearer ${token}` } })
       const notesData = await notesRes.json()
-      const coursesData = await coursesRes.json()
       if (notesData.success) setNotes(notesData.data)
-      if (coursesData.success) setCourses(coursesData.data)
     } catch (err) { console.warn('加载随记失败:', err) }
-    finally { setLoading(false) }
+
+    /* 课程列表接口可能不存在，独立请求并优雅降级 */
+    try {
+      const coursesRes = await fetch(`${API_BASE}/notes/courses`, { headers: { 'Authorization': `Bearer ${token}` } })
+      if (coursesRes.ok) {
+        const coursesData = await coursesRes.json()
+        if (coursesData.success) setCourses(coursesData.data || [])
+      }
+    } catch {
+      /* /api/courses 不存在或返回非 JSON，忽略 */
+    }
+
+    setLoading(false)
   }, [token])
 
   useEffect(() => { loadData() }, [loadData])

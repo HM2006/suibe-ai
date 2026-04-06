@@ -75,7 +75,7 @@ function getPageTitle(pathname) {
 function Layout({ children }) {
   const location = useLocation()
   const navigate = useNavigate()
-  const { title, subtitle } = getPageTitle(location.pathname)
+  const { title } = getPageTitle(location.pathname)
   const { user } = useUser()
   const [showMore, setShowMore] = useState(false)
 
@@ -123,8 +123,7 @@ function Layout({ children }) {
         {/* 顶部标题栏 */}
         <header className="top-header">
           <div style={{ flex: 1 }}>
-            <div className="top-header-title">{title}</div>
-            <div className="top-header-subtitle">{subtitle}</div>
+            {/* 标题由各页面组件自行显示，避免重复 */}
           </div>
           {/* 用户入口 - 右上角 */}
           <Link to="/user" style={{ display: 'flex', alignItems: 'center', gap: '6px', textDecoration: 'none', color: 'var(--text-secondary)' }}>

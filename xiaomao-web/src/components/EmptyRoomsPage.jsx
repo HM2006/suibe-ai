@@ -215,18 +215,21 @@ function AiTab({ data, buildings, dates }) {
   const [step, setStep] = useState(0) // 0=未开始, 1=选日期, 2=选节次, 3=选容量, 4=结果
   const [selectedDate, setSelectedDate] = useState(null)
   const [selectedPeriods, setSelectedPeriods] = useState([])
-  const [minSeats, setMinSeats] = useState(0)
 
-  const addMsg = (role, html) => {
-    setMessages(prev => [...prev, { role, html }])
+  const scrollToBottom = () => {
     setTimeout(() => { if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight }, 50)
   }
 
+  const addMsg = (msg) => {
+    setMessages(prev => [...prev, msg])
+    scrollToBottom()
+  }
+
   const start = () => {
-    setStarted(true); setStep(1); setSelectedDate(null); setSelectedPeriods([]); setMinSeats(0)
+    setStarted(true); setStep(0); setSelectedDate(null); setSelectedPeriods([])
     setMessages([])
     setTimeout(() => {
-      addMsg('ai', '你好！我是空教室查询助手 😊<br/>让我来帮你找到合适的空教室吧！')
+      addMsg({ role: 'ai', type: 'text', text: '你好！我是空教室查询助手 😊\n让我来帮你找到合适的空教室吧！' })
       setTimeout(askDate, 400)
     }, 250)
   }
@@ -235,63 +238,46 @@ function AiTab({ data, buildings, dates }) {
     setStep(1)
     const today = getToday()
     const futureDates = dates.filter(d => d >= today).slice(0, 8)
-    const opts = futureDates.map(d =>
-      `<button class="opt" onclick="window.__sd('${d}')">${d}（${getWeekday(d)}）</button>`
-    ).join('')
-    addMsg('ai', `📅 <strong>第一步：选择日期</strong><br/>你需要查询哪一天的空教室？<div class="opts">${opts}</div>`)
+    addMsg({ role: 'ai', type: 'date-pick', dates: futureDates })
   }
 
   const selectDate = (d) => {
     setSelectedDate(d)
-    addMsg('user', `${d}（${getWeekday(d)}）`)
+    addMsg({ role: 'user', type: 'text', text: `${d}（${getWeekday(d)}）` })
     setTimeout(askPeriods, 350)
   }
 
   const askPeriods = () => {
     setStep(2)
-    const pcs = Array.from({ length: 14 }, (_, i) => i + 1)
-      .map(p => `<label class="pc" onclick="window.__tp(${p}, this)">${PERIODS[p]}</label>`).join('')
-    addMsg('ai', `⏰ <strong>第二步：选择时间段</strong><br/>你需要哪个时间段空闲的教室？（可多选）<div class="pcs">${pcs}</div><div style="margin-top:8px"><button class="opt" onclick="window.__cp()">✅ 确认选择</button></div>`)
+    addMsg({ role: 'ai', type: 'period-pick' })
   }
 
-  const togglePeriod = (p, el) => {
-    if (el) el.classList.toggle('sel')
-    setSelectedPeriods(prev => {
-      const next = prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p].sort()
-      return next
-    })
+  const togglePeriod = (p) => {
+    setSelectedPeriods(prev =>
+      prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p].sort((a, b) => a - b)
+    )
   }
 
-  const confirmPeriods = () => {
-    if (selectedPeriods.length === 0) { addMsg('ai', '请至少选择一个节次哦～'); return }
-    const pstr = selectedPeriods.sort((a, b) => a - b).map(p => PERIODS[p]).join('、')
-    addMsg('user', pstr)
+  const confirmPeriods = (currentPeriods) => {
+    if (currentPeriods.length === 0) { addMsg({ role: 'ai', type: 'text', text: '请至少选择一个节次哦～' }); return }
+    const pstr = currentPeriods.map(p => PERIODS[p]).join('、')
+    addMsg({ role: 'user', type: 'text', text: pstr })
     setTimeout(askSeats, 350)
   }
 
   const askSeats = () => {
     setStep(3)
-    const seatOpts = [
-      { l: '不限座位数', v: 0 }, { l: '30人以上', v: 30 }, { l: '50人以上', v: 50 },
-      { l: '80人以上', v: 80 }, { l: '100人以上', v: 100 }, { l: '150人以上', v: 150 },
-    ]
-    const opts = seatOpts.map(x =>
-      `<button class="opt" onclick="window.__ss(${x.v})">${x.l}</button>`
-    ).join('')
-    addMsg('ai', `👥 <strong>第三步：座位数要求</strong><br/>对教室的座位数有要求吗？<div class="opts">${opts}</div>`)
+    addMsg({ role: 'ai', type: 'seat-pick' })
   }
 
-  const selectSeats = (v) => {
-    setMinSeats(v)
-    addMsg('user', v > 0 ? `至少${v}人` : '不限座位数')
-    setTimeout(doSearch, 500)
+  const selectSeats = (v, currentDate, currentPeriods) => {
+    addMsg({ role: 'user', type: 'text', text: v > 0 ? `至少${v}人` : '不限座位数' })
+    setTimeout(() => doSearch(currentDate, currentPeriods, v), 500)
   }
 
-  const doSearch = () => {
+  const doSearch = (date, periods, minSeats) => {
     setStep(4)
-    const date = selectedDate
-    const periods = selectedPeriods.slice().sort((a, b) => a - b)
-    const pstr = periods.map(p => PERIODS[p]).join('、')
+    const sortedPeriods = periods.slice().sort((a, b) => a - b)
 
     // 查找完全匹配
     const res = []
@@ -299,7 +285,7 @@ function AiTab({ data, buildings, dates }) {
       const br = data.b[bn]
       Object.keys(br).forEach(id => {
         let ok = true
-        periods.forEach(p => {
+        sortedPeriods.forEach(p => {
           const dd = data.s[date]
           if (dd && dd[bn] && dd[bn][id] && !isFree(dd[bn][id], p)) ok = false
         })
@@ -308,71 +294,157 @@ function AiTab({ data, buildings, dates }) {
     })
     res.sort((a, b) => a.seats - b.seats)
 
-    let h = `🔍 <strong>查询结果</strong><br/><br/>📅 日期：${date}（${getWeekday(date)}）<br/>⏰ 时间：${pstr}<br/>👥 座位要求：${minSeats > 0 ? '至少' + minSeats + '人' : '不限'}<br/><br/>`
-
-    if (res.length) {
-      h += `✅ 找到 <strong>${res.length}</strong> 间符合条件的空教室：<br/><br/><div class="rg">`
-      res.forEach(r => {
-        h += `<div class="rc"><div class="ri">${r.building} · ${r.name}</div><div class="rd"><span class="sb">💺 ${r.seats}座</span></div></div>`
-      })
-      h += '</div>'
-    } else {
-      h += '❌ 很抱歉，没有找到完全符合条件的教室。<br/><br/>'
-      // 推荐接近的
-      const alt = []
+    // 推荐接近的
+    let alts = []
+    if (!res.length) {
       // 策略1: 不限座位数
       if (minSeats > 0) {
         buildings.forEach(bn => {
           const br = data.b[bn]
           Object.keys(br).forEach(id => {
             let ok = true
-            periods.forEach(p => {
+            sortedPeriods.forEach(p => {
               const dd = data.s[date]
               if (dd && dd[bn] && dd[bn][id] && !isFree(dd[bn][id], p)) ok = false
             })
-            if (ok) alt.push({ id, name: br[id][1], seats: br[id][0], building: bn, reason: `座位数${br[id][0]}座（要求${minSeats}+）`, fp: periods.length })
+            if (ok) alts.push({ id, name: br[id][1], seats: br[id][0], building: bn, reason: `座位数${br[id][0]}座（要求${minSeats}+）`, fpCount: sortedPeriods.length })
           })
         })
       }
       // 策略2: 部分节次空闲
-      if (alt.length === 0) {
+      if (!alts.length) {
         buildings.forEach(bn => {
           const br = data.b[bn]
           Object.keys(br).forEach(id => {
             const dd = data.s[date]
             const mask = (dd && dd[bn] && dd[bn][id]) || 0
-            const fp = periods.filter(p => isFree(mask, p))
-            if (fp.length) alt.push({ id, name: br[id][1], seats: br[id][0], building: bn, reason: `仅${fp.map(p => PERIODS[p]).join('、')}空闲`, fp })
+            const fp = sortedPeriods.filter(p => isFree(mask, p))
+            if (fp.length) alts.push({ id, name: br[id][1], seats: br[id][0], building: bn, reason: `仅${fp.map(p => PERIODS[p]).join('、')}空闲`, fpCount: fp.length })
           })
         })
       }
-      alt.sort((a, b) => (b.fp ? b.fp.length : 0) - (a.fp ? a.fp.length : 0) || b.seats - a.seats)
-
-      if (alt.length) {
-        h += '💡 为你推荐以下最接近的教室：<br/><br/><div class="rg">'
-        alt.slice(0, 12).forEach(r => {
-          h += `<div class="rc alt"><div class="ri">${r.building} · ${r.name} <span class="ab">接近匹配</span></div><div class="rd"><span class="sb">💺 ${r.seats}座</span> · ${r.reason}</div></div>`
-        })
-        h += '</div>'
-      } else {
-        h += '😔 该日期所有教室在所选时间段均已被占用。建议更换日期或时间段。'
-      }
+      alts.sort((a, b) => b.fpCount - a.fpCount || b.seats - a.seats)
+      alts = alts.slice(0, 12)
     }
-    h += '<br/><div class="opts"><button class="opt" onclick="window.__restart()">🔄 重新查询</button></div>'
-    addMsg('ai', h)
+
+    addMsg({ role: 'ai', type: 'result', date, periods: sortedPeriods, minSeats, results: res, alts })
   }
 
-  // 注册全局回调（因为 AI 消息中的 onclick 需要调用）
-  useEffect(() => {
-    window.__sd = selectDate
-    window.__tp = togglePeriod
-    window.__cp = confirmPeriods
-    window.__ss = selectSeats
-    window.__restart = start
-    return () => {
-      delete window.__sd; delete window.__tp; delete window.__cp; delete window.__ss; delete window.__restart
+  const renderMsgContent = (m) => {
+    if (m.role === 'user') return <span>{m.text}</span>
+
+    switch (m.type) {
+      case 'text':
+        return <span style={{ whiteSpace: 'pre-line' }}>{m.text}</span>
+
+      case 'date-pick':
+        return (
+          <>
+            <span><strong>📅 第一步：选择日期</strong><br />你需要查询哪一天的空教室？</span>
+            <div className="opts">
+              {m.dates.map(d => (
+                <button key={d} className="opt" onClick={() => step === 1 && selectDate(d)}>
+                  {d}（{getWeekday(d)}）
+                </button>
+              ))}
+            </div>
+          </>
+        )
+
+      case 'period-pick':
+        return (
+          <>
+            <span><strong>⏰ 第二步：选择时间段</strong><br />你需要哪个时间段空闲的教室？（可多选）</span>
+            <div className="pcs">
+              {Array.from({ length: 14 }, (_, i) => i + 1).map(p => (
+                <label
+                  key={p}
+                  className={`pc${selectedPeriods.includes(p) ? ' sel' : ''}`}
+                  onClick={() => step === 2 && togglePeriod(p)}
+                  style={step !== 2 ? { pointerEvents: 'none' } : {}}
+                >
+                  {PERIODS[p]}
+                </label>
+              ))}
+            </div>
+            {step === 2 && (
+              <div style={{ marginTop: '8px' }}>
+                <button className="opt" onClick={() => confirmPeriods(selectedPeriods)}>✅ 确认选择</button>
+              </div>
+            )}
+          </>
+        )
+
+      case 'seat-pick': {
+        const seatOpts = [
+          { l: '不限座位数', v: 0 }, { l: '30人以上', v: 30 }, { l: '50人以上', v: 50 },
+          { l: '80人以上', v: 80 }, { l: '100人以上', v: 100 }, { l: '150人以上', v: 150 },
+        ]
+        return (
+          <>
+            <span><strong>👥 第三步：座位数要求</strong><br />对教室的座位数有要求吗？</span>
+            <div className="opts">
+              {seatOpts.map(x => (
+                <button key={x.v} className="opt" onClick={() => step === 3 && selectSeats(x.v, selectedDate, selectedPeriods)}>{x.l}</button>
+              ))}
+            </div>
+          </>
+        )
+      }
+
+      case 'result': {
+        const pstr = m.periods.map(p => PERIODS[p]).join('、')
+        return (
+          <>
+            <div>
+              🔍 <strong>查询结果</strong><br /><br />
+              📅 日期：{m.date}（{getWeekday(m.date)}）<br />
+              ⏰ 时间：{pstr}<br />
+              👥 座位要求：{m.minSeats > 0 ? `至少${m.minSeats}人` : '不限'}<br /><br />
+            </div>
+            {m.results.length > 0 ? (
+              <>
+                <div>✅ 找到 <strong>{m.results.length}</strong> 间符合条件的空教室：</div>
+                <div className="rg">
+                  {m.results.map(r => (
+                    <div key={`${r.building}-${r.id}`} className="rc">
+                      <div className="ri">{r.building} · {r.name}</div>
+                      <div className="rd"><span className="sb">💺 {r.seats}座</span></div>
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <div>❌ 很抱歉，没有找到完全符合条件的教室。</div>
+                {m.alts.length > 0 ? (
+                  <>
+                    <div style={{ marginTop: '8px' }}>💡 为你推荐以下最接近的教室：</div>
+                    <div className="rg">
+                      {m.alts.map(r => (
+                        <div key={`${r.building}-${r.id}`} className="rc alt">
+                          <div className="ri">{r.building} · {r.name} <span className="ab">接近匹配</span></div>
+                          <div className="rd"><span className="sb">💺 {r.seats}座</span> · {r.reason}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ marginTop: '8px' }}>😔 该日期所有教室在所选时间段均已被占用。建议更换日期或时间段。</div>
+                )}
+              </>
+            )}
+            <div className="opts" style={{ marginTop: '12px' }}>
+              <button className="opt" onClick={start}>🔄 重新查询</button>
+            </div>
+          </>
+        )
+      }
+
+      default:
+        return null
     }
-  })
+  }
 
   return (
     <div>
@@ -415,7 +487,9 @@ function AiTab({ data, buildings, dates }) {
                 border: m.role === 'ai' ? '1px solid var(--card-border)' : 'none',
                 borderTopLeftRadius: m.role === 'ai' ? '4px' : '12px',
                 borderTopRightRadius: m.role === 'user' ? '4px' : '12px',
-              }} dangerouslySetInnerHTML={{ __html: m.html }} />
+              }}>
+                {renderMsgContent(m)}
+              </div>
             </div>
           ))
         )}

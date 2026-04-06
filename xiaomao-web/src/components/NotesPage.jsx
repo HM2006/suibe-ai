@@ -1,16 +1,6 @@
 /* ========================================
-   小贸 - 随记页面（整合版）
-   ========================================
-   整合自：
-   - 项目A（Web版）：CSS Grid网格布局、hover效果
-   - 项目B（移动版）：搜索功能、精确isImage、safe-area、
-     note-card-native、CSS类驱动编辑器、图片加载回退、
-     Blob下载+AndroidBridge、垂直列表布局
-
-   API路径统一从 '../config/api' 导入 API_BASE
-   布局通过CSS media query切换：桌面端Grid网格，移动端垂直列表
-   卡片同时应用 note-card 和 note-card-native 类，由CSS控制显示
-   下载功能同时支持Blob和AndroidBridge，优先AndroidBridge
+   小贸 - 随记页面（精简版）
+   textarea纯文本 + 附件独立存储 + AI速览 + visualViewport键盘适配
    ======================================== */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -57,25 +47,18 @@ function formatDate(dateStr) {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-/* 精确的图片类型判断（来自项目B） */
-function isImage(mimetype) {
-  if (!mimetype) return false
-  const imgTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/webp', 'image/bmp', 'image/svg+xml']
-  return imgTypes.includes(mimetype.toLowerCase()) || mimetype.startsWith('image/')
-}
+function isImage(mimetype) { return mimetype && mimetype.startsWith('image/') }
 
 function getFileExt(filename) {
   const parts = filename.split('.')
   return parts.length > 1 ? parts.pop().toUpperCase() : '?'
 }
 
-/* 文件扩展名颜色（含图片扩展名 #8B5CF6，来自项目B） */
 function getFileColor(ext) {
   if (['PDF'].includes(ext)) return '#EF4444'
   if (['DOC', 'DOCX'].includes(ext)) return '#3B82F6'
   if (['PPT', 'PPTX'].includes(ext)) return '#F97316'
   if (['XLS', 'XLSX'].includes(ext)) return '#22C55E'
-  if (['PNG', 'JPG', 'JPEG', 'GIF', 'WEBP', 'SVG', 'BMP'].includes(ext)) return '#8B5CF6'
   return '#6B7280'
 }
 
@@ -90,7 +73,7 @@ function SkeletonLoader() {
   )
 }
 
-/* ========== Toast 提示（safe-area适配，来自项目B） ========== */
+/* ========== Toast 提示 ========== */
 function Toast({ message, onDone }) {
   useEffect(() => {
     const t = setTimeout(onDone, 2000)
@@ -98,7 +81,7 @@ function Toast({ message, onDone }) {
   }, [onDone])
   return (
     <div style={{
-      position: 'fixed', top: 'calc(80px + env(safe-area-inset-top, 0px))', left: '50%', transform: 'translateX(-50%)',
+      position: 'fixed', top: '80px', left: '50%', transform: 'translateX(-50%)',
       padding: '10px 24px', borderRadius: '20px',
       background: '#059669', color: '#fff', fontSize: '14px', fontWeight: 500,
       boxShadow: '0 4px 12px rgba(5,150,105,0.3)', zIndex: 200,
@@ -109,25 +92,16 @@ function Toast({ message, onDone }) {
   )
 }
 
-/* ========== 便签卡片（整合版：同时应用两个class，由CSS控制显示） ========== */
+/* ========== 便签卡片（列表） ========== */
 function NoteCard({ note, onClick }) {
   return (
-    <div
-      className="note-card note-card-native"
-      onClick={onClick}
-      /* 桌面端hover效果（来自项目A） */
-      onMouseEnter={e => {
-        e.currentTarget.style.borderColor = 'var(--primary)'
-        e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.borderColor = 'var(--card-border)'
-        e.currentTarget.style.boxShadow = 'none'
-      }}
+    <div className="note-card" onClick={onClick}
+      onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--primary)'; e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)' }}
+      onMouseLeave={e => { e.currentTarget.style.borderColor = 'var(--card-border)'; e.currentTarget.style.boxShadow = 'none' }}
     >
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '4px' }}>
-          <span style={{ fontSize: '15px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+          <span style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
             {note.title || '无标题'}
           </span>
           {note.course_name && (
@@ -137,21 +111,19 @@ function NoteCard({ note, onClick }) {
           )}
           {note.ai_summary && <Sparkles size={12} style={{ color: '#F59E0B', flexShrink: 0 }} />}
         </div>
-        <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
           {note.content || '暂无内容'}
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '8px', fontSize: '11px', color: 'var(--text-muted)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', fontSize: '11px', color: 'var(--text-muted)' }}>
           <span>{formatDate(note.updated_at)}</span>
           {note.attachment_count > 0 && <span style={{ display: 'flex', alignItems: 'center', gap: '2px' }}><Paperclip size={10} /> {note.attachment_count}</span>}
         </div>
       </div>
-      {/* 移动端右箭头（来自项目B），桌面端由CSS隐藏 */}
-      <ChevronLeft size={16} className="note-card-chevron" style={{ color: 'var(--text-muted)', transform: 'rotate(180deg)', flexShrink: 0, marginLeft: '8px' }} />
     </div>
   )
 }
 
-/* ========== 随记编辑器（整合版：CSS类驱动 + 内联样式兼容） ========== */
+/* ========== 随记编辑器 ========== */
 function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
   /* 状态 */
   const [noteId, setNoteId] = useState(initialNote?.id || null)
@@ -316,50 +288,17 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
     finally { setIsSummarizing(false) }
   }
 
-  /* 下载附件（整合版：优先AndroidBridge，回退Blob下载） */
+  /* 下载附件 */
   const handleDownload = async (att) => {
     try {
       const res = await fetch(`${API.notes}/${noteId}/attachments/${att.id}`, { headers: { 'Authorization': `Bearer ${token}` } })
       const data = await res.json()
-      if (!data.success) { setError('下载失败：文件不存在'); return }
-
-      const fileData = data.data
-      const base64Data = fileData.data
-      const mimeType = att.mimetype || fileData.mimetype || 'application/octet-stream'
-      const filename = att.filename || 'download'
-
-      /* 将base64转为Blob */
-      const byteCharacters = atob(base64Data)
-      const byteNumbers = new Array(byteCharacters.length)
-      for (let i = 0; i < byteCharacters.length; i++) {
-        byteNumbers[i] = byteCharacters.charCodeAt(i)
-      }
-      const byteArray = new Uint8Array(byteNumbers)
-      const blob = new Blob([byteArray], { type: mimeType })
-
-      /* 优先使用AndroidBridge原生桥接（来自项目B） */
-      if (window.AndroidBridge && typeof window.AndroidBridge.downloadFile === 'function') {
-        const reader = new FileReader()
-        reader.onload = () => { window.AndroidBridge.downloadFile(filename, reader.result) }
-        reader.readAsDataURL(blob)
-        return
-      }
-
-      /* 回退到Blob URL下载 */
-      const blobUrl = URL.createObjectURL(blob)
+      if (!data.success) return
       const link = document.createElement('a')
-      link.href = blobUrl
-      link.download = filename
-      link.style.display = 'none'
-      document.body.appendChild(link)
+      link.href = `data:${att.mimetype};base64,${data.data.data}`
+      link.download = att.filename
       link.click()
-      document.body.removeChild(link)
-
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000)
-    } catch (err) {
-      console.error('下载失败:', err)
-      setError('下载失败，请重试')
-    }
+    } catch { setError('下载失败') }
   }
 
   /* 返回 - 检查未保存 */
@@ -375,7 +314,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
   const handleCopySummary = () => { navigator.clipboard.writeText(aiSummary).catch(() => {}) }
 
   return (
-    <div className="note-editor-native" style={{
+    <div style={{
       display: 'flex', flexDirection: 'column', height: '100vh', height: '100dvh',
       overflow: 'hidden', position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
       background: 'var(--bg)', zIndex: 100,
@@ -383,36 +322,36 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
       {/* Toast */}
       {toast && <Toast message={toast} onDone={() => setToast('')} />}
 
-      {/* 顶部导航栏 - CSS类驱动（来自项目B）+ 内联样式兼容（来自项目A） */}
-      <div className="note-editor-header" style={{
+      {/* 顶部导航栏 */}
+      <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '12px 16px', borderBottom: '1px solid var(--card-border)',
         background: 'var(--card-bg)', flexShrink: 0, zIndex: 10,
       }}>
-        <button className="note-editor-back-btn" onClick={handleBack} style={{
+        <button onClick={handleBack} style={{
           display: 'flex', alignItems: 'center', gap: '2px',
           background: 'none', border: 'none', color: 'var(--primary)',
           fontSize: '14px', cursor: 'pointer', padding: '4px 0', fontWeight: 500,
         }}>
-          <ChevronLeft size={22} /> 返回
+          <ChevronLeft size={20} /> 返回
         </button>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {noteId && (
-            <button className="note-editor-action-btn note-editor-delete-btn" onClick={onDelete} style={{
+            <button onClick={onDelete} style={{
               display: 'flex', alignItems: 'center', gap: '4px',
               padding: '6px 12px', borderRadius: '20px', border: 'none',
               background: '#FEF2F2', color: '#DC2626', fontSize: '12px', fontWeight: 600, cursor: 'pointer',
             }}>
-              <Trash2 size={14} /> 删除
+              <Trash2 size={12} /> 删除
             </button>
           )}
-          <button className="note-editor-save-btn" onClick={handleSave} disabled={isSaving} style={{
+          <button onClick={handleSave} disabled={isSaving} style={{
             display: 'flex', alignItems: 'center', gap: '4px',
             padding: '6px 14px', borderRadius: '20px', border: 'none',
             background: 'var(--primary)', color: '#fff', fontSize: '12px', fontWeight: 600,
             cursor: 'pointer', opacity: isSaving ? 0.7 : 1,
           }}>
-            {isSaving ? <Loader size={14} className="spin-icon" /> : <Save size={14} />}
+            {isSaving ? <Loader size={12} style={{ animation: 'spin 1s linear infinite' }} /> : <Save size={12} />}
             保存
           </button>
         </div>
@@ -420,37 +359,37 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
 
       {/* 错误提示 */}
       {error && (
-        <div className="note-error-bar" style={{ margin: '8px 16px', padding: '8px 12px', background: '#FEF2F2', color: '#991B1B', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', zIndex: 10 }}>
+        <div style={{ margin: '8px 16px', padding: '8px 12px', background: '#FEF2F2', color: '#991B1B', borderRadius: '8px', fontSize: '12px', display: 'flex', alignItems: 'center', gap: '6px', zIndex: 10 }}>
           <AlertCircle size={12} /> {error}
-          <span className="note-error-close" style={{ marginLeft: 'auto', cursor: 'pointer' }} onClick={() => setError('')}><X size={12} /></span>
+          <span style={{ marginLeft: 'auto', cursor: 'pointer' }} onClick={() => setError('')}><X size={12} /></span>
         </div>
       )}
 
       {/* 可滚动编辑区域 */}
-      <div className="note-editor-scroll" style={{
+      <div style={{
         flex: 1, overflowY: 'auto', WebkitOverflowScrolling: 'touch',
-        paddingBottom: isKeyboardOpen ? `${keyboardHeight + 56}px` : 'calc(56px + env(safe-area-inset-bottom, 0px))',
+        paddingBottom: isKeyboardOpen ? `${keyboardHeight + 56}px` : '56px',
       }}>
-        <div className="note-editor-body" style={{ maxWidth: '600px', margin: '0 auto', padding: '16px' }}>
+        <div style={{ maxWidth: '600px', margin: '0 auto', padding: '16px' }}>
 
-          {/* AI速览区域 */}
+          {/* AI速览区域 - 关闭改为折叠 */}
           {showAiSummary && (
-            <div className="note-ai-panel" style={{
+            <div style={{
               marginBottom: '16px', borderRadius: '12px', overflow: 'hidden',
               border: '1px solid #FDE68A',
               background: 'linear-gradient(135deg, #FFFBEB, #FEF3C7)',
             }}>
-              <div className="note-ai-panel-header" style={{
+              <div style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 padding: '10px 14px', borderBottom: aiCollapsed ? 'none' : '1px solid #FDE68A',
                 cursor: 'pointer',
               }} onClick={() => setAiCollapsed(!aiCollapsed)}>
-                <div className="note-ai-panel-title" style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: '#D97706' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px', fontWeight: 600, color: '#D97706' }}>
                   <Sparkles size={14} /> AI速览
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                   {aiSummary && !isSummarizing && (
-                    <button className="note-ai-copy-btn" onClick={(e) => { e.stopPropagation(); handleCopySummary() }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D97706', padding: '2px' }}>
+                    <button onClick={(e) => { e.stopPropagation(); handleCopySummary() }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#D97706', padding: '2px' }}>
                       <Copy size={14} />
                     </button>
                   )}
@@ -474,17 +413,17 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
             </div>
           )}
 
-          {/* 标题输入 - CSS类驱动（来自项目B）+ 内联样式兼容（来自项目A） */}
-          <input type="text" value={title} onChange={handleTitleChange} placeholder="标题" className="note-title-input" style={{
+          {/* 标题 */}
+          <input type="text" value={title} onChange={handleTitleChange} placeholder="标题" style={{
             width: '100%', border: 'none', background: 'transparent',
             fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)',
             outline: 'none', padding: '4px 0', marginBottom: '8px',
           }} />
 
-          {/* 课程关联 - CSS类驱动（来自项目B） */}
+          {/* 课程关联 */}
           {courses.length > 0 && (
             <div style={{ marginBottom: '12px' }}>
-              <select value={courseName} onChange={handleCourseChange} className="note-course-select" style={{
+              <select value={courseName} onChange={handleCourseChange} style={{
                 width: '100%', maxWidth: '240px', padding: '6px 12px',
                 border: '1px solid var(--card-border)', borderRadius: '8px',
                 background: 'var(--bg)', color: 'var(--text-primary)',
@@ -496,34 +435,24 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
             </div>
           )}
 
-          {/* 内容输入 - CSS类驱动（来自项目B）+ 内联样式兼容（来自项目A） */}
+          {/* textarea */}
           {isLoadingNote ? (
             <div style={{ minHeight: '200px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Loader size={18} className="spin-icon" style={{ color: 'var(--text-muted)' }} />
+              <Loader size={18} style={{ animation: 'spin 1s linear infinite', color: 'var(--text-muted)' }} />
             </div>
           ) : (
-            <textarea value={content} onChange={handleContentChange} placeholder="开始记录..." className="note-content-input" style={{
+            <textarea value={content} onChange={handleContentChange} placeholder="开始记录..." style={{
               width: '100%', minHeight: '200px', border: 'none', background: 'transparent',
               color: 'var(--text-primary)', fontSize: '15px', lineHeight: '1.8',
               resize: 'none', outline: 'none', fontFamily: 'inherit', caretColor: 'var(--primary)',
             }} />
           )}
 
-          {/* 图片附件 - 含加载失败回退（来自项目B） */}
+          {/* 图片附件 */}
           {attachments.filter(a => isImage(a.mimetype)).map(att => (
-            <div key={att.id} className="note-image-attachment" style={{ position: 'relative', margin: '12px 0', borderRadius: '14px', overflow: 'hidden', border: '1px solid var(--card-border)' }}>
-              <img
-                src={att.data ? `data:${att.mimetype};base64,${att.data}` : ''}
-                alt={att.filename}
-                style={{ width: '100%', display: 'block', maxHeight: '300px', objectFit: 'contain' }}
-                onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
-                onLoad={(e) => { e.target.nextSibling.style.display = 'none'; e.target.style.display = 'block'; }}
-              />
-              {/* 图片加载失败回退提示（来自项目B） */}
-              <div style={{ display: 'none', padding: '20px', alignItems: 'center', justifyContent: 'center', color: 'var(--text-muted)', fontSize: '13px', gap: '8px' }}>
-                <Camera size={20} /> 图片加载失败
-              </div>
-              <button className="note-image-remove-btn" onClick={() => handleRemoveAttachment(att)} style={{
+            <div key={att.id} style={{ position: 'relative', margin: '12px 0', borderRadius: '14px', overflow: 'hidden', border: '1px solid var(--card-border)' }}>
+              <img src={`data:${att.mimetype};base64,${att.data}`} alt={att.filename} style={{ width: '100%', display: 'block' }} />
+              <button onClick={() => handleRemoveAttachment(att)} style={{
                 position: 'absolute', top: '8px', right: '8px', width: '24px', height: '24px',
                 borderRadius: '50%', background: 'rgba(0,0,0,0.5)', color: '#fff', border: 'none',
                 display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', padding: 0,
@@ -550,8 +479,8 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
         </div>
       </div>
 
-      {/* 底部工具栏 - CSS类驱动（来自项目B）+ safe-area适配 */}
-      <div className="note-editor-toolbar" style={{
+      {/* 底部工具栏 */}
+      <div style={{
         position: 'fixed', left: 0, right: 0,
         bottom: isKeyboardOpen ? keyboardHeight : 0, zIndex: 50,
         display: 'flex', alignItems: 'center', justifyContent: 'space-around',
@@ -576,7 +505,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
   )
 }
 
-/* ========== 随记主页面（整合版） ========== */
+/* ========== 随记主页面 ========== */
 function NotesPage() {
   const navigate = useNavigate()
   const { user, token } = useUser()
@@ -585,37 +514,29 @@ function NotesPage() {
   const [loading, setLoading] = useState(true)
   const [editingNote, setEditingNote] = useState(null)
   const [filterCourse, setFilterCourse] = useState('')
-  const [showFilter, setShowFilter] = useState(false)
-  /* 搜索功能（来自项目B） */
   const [searchQuery, setSearchQuery] = useState('')
+  const [showFilter, setShowFilter] = useState(false)
 
   const loadData = useCallback(async () => {
     if (!token) { setLoading(false); return }
     setLoading(true)
     try {
-      const notesRes = await fetch(API.notes, { headers: { 'Authorization': `Bearer ${token}` } })
+      const [notesRes, coursesRes] = await Promise.all([
+        fetch(API.notes, { headers: { 'Authorization': `Bearer ${token}` } }),
+        fetch(`${API.notes}/courses`, { headers: { 'Authorization': `Bearer ${token}` } }),
+      ])
       const notesData = await notesRes.json()
-      if (notesData.success) setNotes(Array.isArray(notesData.data) ? notesData.data : [])
+      const coursesData = await coursesRes.json()
+      if (notesData.success) setNotes(notesData.data)
+      if (coursesData.success) setCourses(coursesData.data)
     } catch (err) { console.warn('加载随记失败:', err) }
-
-    /* 课程列表接口可能不存在，独立请求并优雅降级 */
-    try {
-      const coursesRes = await fetch(`${API.notes}/courses`, { headers: { 'Authorization': `Bearer ${token}` } })
-      if (coursesRes.ok) {
-        const coursesData = await coursesRes.json()
-        if (coursesData.success) setCourses(coursesData.data || [])
-      }
-    } catch {
-      /* /api/courses 不存在或返回非 JSON，忽略 */
-    }
-
-    setLoading(false)
+    finally { setLoading(false) }
   }, [token])
 
   useEffect(() => { loadData() }, [loadData])
 
-  /* 筛选 + 搜索后的随记（整合版：同时支持课程筛选和关键词搜索） */
-  const filteredNotes = notes.filter(n => {
+  /* 筛选 + 搜索后的随记（notes 始终保证为数组） */
+  const filteredNotes = (notes || []).filter(n => {
     const matchCourse = !filterCourse || n.course_name === filterCourse
     const matchSearch = !searchQuery ||
       (n.title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -625,10 +546,10 @@ function NotesPage() {
 
   if (!user) {
     return (
-      <div className="notes-empty-state" style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
+      <div style={{ padding: '60px 20px', textAlign: 'center', color: 'var(--text-muted)' }}>
         <FileText size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
         <p style={{ fontSize: '15px', fontWeight: 500, marginBottom: '8px', color: 'var(--text-secondary)' }}>登录后使用随记功能</p>
-        <button className="note-login-btn" onClick={() => navigate('/user')} style={{ padding: '10px 24px', borderRadius: '20px', border: 'none', background: 'var(--primary)', color: '#fff', fontSize: '14px', cursor: 'pointer' }}>前往登录</button>
+        <button onClick={() => navigate('/user')} style={{ padding: '10px 24px', borderRadius: '20px', border: 'none', background: 'var(--primary)', color: '#fff', fontSize: '14px', cursor: 'pointer' }}>前往登录</button>
       </div>
     )
   }
@@ -654,41 +575,52 @@ function NotesPage() {
     )
   }
 
-  /* 列表模式（整合版：桌面端Grid网格 + 移动端垂直列表，通过CSS media query切换） */
+  /* 列表模式 */
   return (
-    <div className="notes-page-native">
-      {/* 顶部操作栏 */}
-      <div className="notes-top-bar">
-        {/* 桌面端标题区域（来自项目A） */}
-        <div className="notes-page-title-area">
+    <div className="notes-container">
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
           <h1 className="page-title">随记</h1>
           <p className="page-desc">记录课程要点，AI帮你速览</p>
         </div>
-
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          {/* 搜索框 */}
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              placeholder="搜索随记..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              style={{
+                width: '160px', height: '36px', borderRadius: '18px',
+                border: '1px solid var(--card-border)', background: 'var(--bg-secondary)',
+                padding: '0 12px 0 34px', fontSize: '13px', color: 'var(--text-primary)',
+                outline: 'none', transition: 'border-color 0.2s',
+              }}
+              onFocus={e => e.target.style.borderColor = 'var(--primary)'}
+              onBlur={e => e.target.style.borderColor = 'var(--card-border)'}
+            />
+            <Search size={14} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
+          </div>
           {/* 筛选按钮 */}
           {courses.length > 0 && (
             <div style={{ position: 'relative' }}>
-              <button
-                className={`notes-filter-btn ${showFilter || filterCourse ? 'active' : ''}`}
-                onClick={() => setShowFilter(!showFilter)}
-                style={{
-                  width: '36px', height: '36px', borderRadius: '50%', border: '1px solid var(--card-border)',
-                  background: showFilter ? 'var(--primary)' : 'var(--card-bg)',
-                  color: showFilter ? '#fff' : 'var(--text-secondary)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
-                }}
-              >
+              <button onClick={() => setShowFilter(!showFilter)} style={{
+                width: '36px', height: '36px', borderRadius: '50%', border: '1px solid var(--card-border)',
+                background: showFilter ? 'var(--primary)' : 'var(--card-bg)',
+                color: showFilter ? '#fff' : 'var(--text-secondary)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+              }}>
                 <Filter size={16} />
               </button>
               {showFilter && (
-                <div className="notes-filter-dropdown" style={{
+                <div style={{
                   position: 'absolute', top: '42px', right: 0, zIndex: 20,
                   background: 'var(--card-bg)', border: '1px solid var(--card-border)',
                   borderRadius: '12px', padding: '8px', minWidth: '160px',
                   boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
                 }}>
-                  <div className="notes-filter-item" onClick={() => { setFilterCourse(''); setShowFilter(false) }}
+                  <div onClick={() => { setFilterCourse(''); setShowFilter(false) }}
                     style={{ padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
                       background: filterCourse === '' ? 'rgba(79,70,229,0.1)' : 'transparent',
                       color: filterCourse === '' ? 'var(--primary)' : 'var(--text-secondary)',
@@ -697,7 +629,7 @@ function NotesPage() {
                     {filterCourse === '' && <Check size={14} />} 全部随记
                   </div>
                   {courses.map(c => (
-                    <div key={c} className="notes-filter-item" onClick={() => { setFilterCourse(c); setShowFilter(false) }}
+                    <div key={c} onClick={() => { setFilterCourse(c); setShowFilter(false) }}
                       style={{ padding: '8px 12px', borderRadius: '8px', cursor: 'pointer', fontSize: '13px',
                         background: filterCourse === c ? 'rgba(79,70,229,0.1)' : 'transparent',
                         color: filterCourse === c ? 'var(--primary)' : 'var(--text-secondary)',
@@ -711,34 +643,17 @@ function NotesPage() {
               )}
             </div>
           )}
-          {/* 搜索框（来自项目B） */}
-          <div className="notes-search-box">
-            <Search size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
-            <input
-              type="text"
-              placeholder="搜索随记..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="notes-search-input"
-            />
-            {searchQuery && (
-              <X size={14} style={{ color: 'var(--text-muted)', cursor: 'pointer', flexShrink: 0 }} onClick={() => setSearchQuery('')} />
-            )}
-          </div>
-          {/* 新建按钮 */}
-          <button className="notes-add-btn" onClick={() => setEditingNote({})} style={{
+          <button onClick={() => setEditingNote({})} style={{
             width: '40px', height: '40px', borderRadius: '50%', border: 'none',
             background: 'var(--primary)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'pointer', boxShadow: '0 2px 8px rgba(79,70,229,0.3)',
-          }}>
-            <Plus size={20} />
-          </button>
+          }}><Plus size={20} /></button>
         </div>
       </div>
 
       {/* 筛选提示 */}
       {filterCourse && (
-        <div className="notes-filter-tag" style={{
+        <div style={{
           display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px',
           padding: '6px 12px', background: 'rgba(79,70,229,0.06)', borderRadius: '8px',
           fontSize: '13px', color: 'var(--primary)',
@@ -750,29 +665,22 @@ function NotesPage() {
         </div>
       )}
 
-      {/* 内容区域 */}
       {loading ? (
         <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-          <Loader size={20} className="spin-icon" style={{ display: 'inline-block' }} />
+          <Loader size={20} style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }} />
         </div>
       ) : filteredNotes.length === 0 ? (
-        <div className="notes-empty-state">
+        <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)' }}>
           <FileText size={48} style={{ margin: '0 auto 16px', opacity: 0.3 }} />
           <p style={{ fontSize: '15px', fontWeight: 500, marginBottom: '8px', color: 'var(--text-secondary)' }}>
-            {filterCourse || searchQuery ? '没有找到匹配的随记' : '还没有随记'}
+            {filterCourse ? '该课程暂无随记' : '还没有随记'}
           </p>
-          <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>
-            {filterCourse || searchQuery ? '尝试其他筛选条件' : '点击右上角 + 创建第一条随记'}
+          <p style={{ fontSize: '13px' }}>
+            {filterCourse ? '点击筛选图标查看全部' : '点击右上角 + 创建第一条随记'}
           </p>
         </div>
       ) : (
-        /*
-         * 整合版列表布局：
-         * - 桌面端：使用CSS Grid网格布局（来自项目A），通过 .notes-grid 类控制
-         * - 移动端：使用垂直列表布局（来自项目B），通过 .notes-list-native 类控制
-         * 两个class同时应用，由CSS media query决定哪个生效
-         */
-        <div className="notes-grid notes-list-native">
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '12px' }}>
           {filteredNotes.map(note => <NoteCard key={note.id} note={note} onClick={() => setEditingNote(note)} />)}
         </div>
       )}

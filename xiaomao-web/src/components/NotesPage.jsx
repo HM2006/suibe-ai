@@ -25,7 +25,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import 'katex/dist/katex.min.css'
 import { useUser } from '../contexts/UserContext'
-import { API_BASE } from '../config/api'
+import { API } from '../config/api'
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024
 
@@ -201,7 +201,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
     if (!initialNote?.id || !token) return
     const loadFullNote = async () => {
       try {
-        const res = await fetch(`${API_BASE}/${initialNote.id}`, { headers: { 'Authorization': `Bearer ${token}` } })
+        const res = await fetch(`${API.notes}/${initialNote.id}`, { headers: { 'Authorization': `Bearer ${token}` } })
         const data = await res.json()
         if (data.success) {
           const n = data.data
@@ -221,7 +221,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
     if (!token) return null
     let savedNote
     if (noteId) {
-      const res = await fetch(`${API_BASE}/${noteId}`, {
+      const res = await fetch(`${API.notes}/${noteId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ title: t, course_name: cn, content: c, ai_summary: aiS }),
@@ -230,7 +230,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
       if (!data.success) throw new Error(data.message || '保存失败')
       savedNote = data.data
     } else {
-      const res = await fetch(API_BASE, {
+      const res = await fetch(API.notes, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ title: t, course_name: cn, content: c }),
@@ -248,7 +248,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
     const newAtts = atts.filter(a => a.isNew)
     if (newAtts.length === 0) return
     const filesData = newAtts.map(a => ({ filename: a.filename, mimetype: a.mimetype, data: a.data }))
-    await fetch(`${API_BASE}/${nid}/attachments`, {
+    await fetch(`${API.notes}/${nid}/attachments`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
       body: JSON.stringify({ files: filesData }),
@@ -290,7 +290,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
   const handleRemoveAttachment = async (att) => {
     if (att.isNew) { setAttachments(prev => prev.filter(a => a.id !== att.id)); markChanged(); return }
     try {
-      await fetch(`${API_BASE}/${noteId}/attachments/${att.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })
+      await fetch(`${API.notes}/${noteId}/attachments/${att.id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })
       setAttachments(prev => prev.filter(a => a.id !== att.id))
     } catch { setError('删除附件失败') }
   }
@@ -302,12 +302,12 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
     try {
       const savedNote = await doSave(title.trim() || '未命名随记', courseName, content, aiSummary)
       await uploadNewAttachments(savedNote.id, attachments)
-      const res = await fetch(`${API_BASE}/${savedNote.id}/summarize`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } })
+      const res = await fetch(`${API.notes}/${savedNote.id}/summarize`, { method: 'POST', headers: { 'Authorization': `Bearer ${token}` } })
       const data = await res.json()
       if (!data.success) throw new Error(data.message)
       const summary = data.data.summary
       setAiSummary(summary)
-      await fetch(`${API_BASE}/${savedNote.id}`, {
+      await fetch(`${API.notes}/${savedNote.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
         body: JSON.stringify({ ai_summary: summary }),
@@ -319,7 +319,7 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
   /* 下载附件（整合版：优先AndroidBridge，回退Blob下载） */
   const handleDownload = async (att) => {
     try {
-      const res = await fetch(`${API_BASE}/${noteId}/attachments/${att.id}`, { headers: { 'Authorization': `Bearer ${token}` } })
+      const res = await fetch(`${API.notes}/${noteId}/attachments/${att.id}`, { headers: { 'Authorization': `Bearer ${token}` } })
       const data = await res.json()
       if (!data.success) { setError('下载失败：文件不存在'); return }
 
@@ -593,14 +593,14 @@ function NotesPage() {
     if (!token) { setLoading(false); return }
     setLoading(true)
     try {
-      const notesRes = await fetch(API_BASE, { headers: { 'Authorization': `Bearer ${token}` } })
+      const notesRes = await fetch(API.notes, { headers: { 'Authorization': `Bearer ${token}` } })
       const notesData = await notesRes.json()
       if (notesData.success) setNotes(Array.isArray(notesData.data) ? notesData.data : [])
     } catch (err) { console.warn('加载随记失败:', err) }
 
     /* 课程列表接口可能不存在，独立请求并优雅降级 */
     try {
-      const coursesRes = await fetch(`${API_BASE}/notes/courses`, { headers: { 'Authorization': `Bearer ${token}` } })
+      const coursesRes = await fetch(`${API.notes}/courses`, { headers: { 'Authorization': `Bearer ${token}` } })
       if (coursesRes.ok) {
         const coursesData = await coursesRes.json()
         if (coursesData.success) setCourses(coursesData.data || [])
@@ -645,7 +645,7 @@ function NotesPage() {
           if (!nid) return
           if (!confirm('确定删除这条随记吗？')) return
           try {
-            await fetch(`${API_BASE}/${nid}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })
+            await fetch(`${API.notes}/${nid}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${token}` } })
             setEditingNote(null); loadData()
           } catch { /* ignore */ }
         }}

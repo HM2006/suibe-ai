@@ -127,7 +127,7 @@ function OverviewTab({ data, buildings, dates, getEmpty }) {
       {/* 统计卡片 */}
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
         {buildings.map(bn => {
-          const s = stats[bn]
+          const s = stats.result[bn]
           return (
             <div key={bn} style={{
               flex: '1 1 130px', padding: '12px', borderRadius: '10px', textAlign: 'center',
@@ -255,6 +255,7 @@ function AiTab({ data, buildings, dates }) {
   }
 
   const togglePeriod = (p, el) => {
+    if (el) el.classList.toggle('sel')
     setSelectedPeriods(prev => {
       const next = prev.includes(p) ? prev.filter(x => x !== p) : [...prev, p].sort()
       return next

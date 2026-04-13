@@ -58,8 +58,8 @@ class EduProxy {
     /* 认证相关状态 */
     this.qrUuid = null;
     this.ltTicket = null;
+    this.execution = null;     // CAS 表单 execution 参数
     this.authSessionId = null;   // authserver 的 JSESSIONID
-    this._submitting = false;    // 防止并发提交登录表单
     /* API 相关参数 - 登录后自动获取 */
     this.studentId = null;
     this.semesterId = null;
@@ -90,8 +90,8 @@ class EduProxy {
     this.cookieJar = {};
     this.qrUuid = null;
     this.ltTicket = null;
+    this.execution = null;
     this.authSessionId = null;
-    this._submitting = false;
     this.studentId = null;
     this.semesterId = null;
     this.axiosInstance = null;
@@ -132,8 +132,8 @@ class EduProxy {
       timeout: 15000,
       /* 禁用 axios 内置 proxy（避免明文 HTTP 发到 HTTPS 端口） */
       proxy: false,
-      beforeRedirect: (options, { headers: redirectHeaders }) => {
-        const setCookies = redirectHeaders?.['set-cookie'] || [];
+      beforeRedirect: (options, { responseHeaders }) => {
+        const setCookies = responseHeaders?.['set-cookie'] || [];
         for (const raw of setCookies) {
           const eqIdx = raw.indexOf('=');
           if (eqIdx === -1) continue;
@@ -221,7 +221,7 @@ class EduProxy {
       this.authSessionId = this.cookieJar['JSESSIONID'] || null;
       console.log(`[EduProxy] 步骤2完成：JSESSIONID=${this.authSessionId ? '已获取' : '未获取'}`);
 
-      /* 从 HTML 中提取 lt ticket */
+      /* 从 HTML 中提取 lt ticket 和 execution 参数 */
       const html = authResponse.data || '';
       const ltMatch = html.match(/name="lt"\s+value="([^"]+)"/);
       if (!ltMatch) {
@@ -229,6 +229,12 @@ class EduProxy {
       }
       this.ltTicket = ltMatch[1];
       console.log(`[EduProxy] lt ticket: ${this.ltTicket}`);
+
+      const execMatch = html.match(/name="execution"\s+value="([^"]+)"/);
+      if (execMatch) {
+        this.execution = execMatch[1];
+        console.log(`[EduProxy] execution: ${this.execution}`);
+      }
 
       /*
        * 步骤3：GET /authserver/qrCode/get → 获取二维码 UUID
@@ -345,20 +351,9 @@ class EduProxy {
           console.log(`[EduProxy] 扫码状态: ${status} (${new Date().toISOString()})`);
 
           if (status === '1') {
-            /* 用户已确认登录，提交登录表单（加锁防止并发） */
-            if (this._submitting) {
-              console.log('[EduProxy] 登录表单正在提交中，跳过重复提交');
-              /* 等待正在提交的请求完成 */
-              await this._delay(1000);
-              continue;
-            }
-            this._submitting = true;
+            /* 用户已确认登录，提交登录表单 */
             console.log('[EduProxy] 用户已确认登录，提交登录表单...');
-            try {
-              await this._submitLoginForm(serviceParam);
-            } finally {
-              this._submitting = false;
-            }
+            await this._submitLoginForm(serviceParam);
             break;
           } else if (status === '2') {
             /* 已扫描，等待确认 */
@@ -394,16 +389,26 @@ class EduProxy {
     try {
       /*
        * POST /authserver/login
-       * 表单参数: lt={ticket}&dllt=qrLogin&uuid={uuid}
+       * 表单参数必须包含完整的表单字段（与浏览器提交一致）：
+       *   lt, dllt, uuid, execution, _eventId, rmShown
        * 让 axios 自动跟随重定向链收集 cookie
        */
+      const formParams = {
+        lt: this.ltTicket,
+        dllt: 'qrLogin',
+        uuid: this.qrUuid,
+        _eventId: 'submit',
+        rmShown: '1',
+      };
+      if (this.execution) {
+        formParams.execution = this.execution;
+      }
+
+      console.log(`[EduProxy] 提交登录表单，参数: lt=${this.ltTicket?.substring(0, 20)}..., uuid=${this.qrUuid}`);
+
       const loginResponse = await axios.post(
         `${AUTH_LOGIN_URL}?service=${serviceParam}`,
-        new URLSearchParams({
-          lt: this.ltTicket,
-          dllt: 'qrLogin',
-          uuid: this.qrUuid,
-        }).toString(),
+        new URLSearchParams(formParams).toString(),
         this._cookieCaptureConfig({
           'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
           'Referer': `${AUTH_LOGIN_URL}?service=${serviceParam}`,
@@ -417,12 +422,17 @@ class EduProxy {
       const finalUrl = loginResponse.request?.res?.responseUrl || loginResponse.config?.url || '';
       console.log(`[EduProxy] 登录重定向完成，最终 URL: ${finalUrl}`);
 
-      if (finalUrl.includes(EDU_HOST) || loginResponse.data?.includes?.(EDU_HOST)) {
-        console.log('[EduProxy] 已成功重定向回教务系统');
-      } else {
-        console.warn('[EduProxy] 最终 URL 未到达教务系统，但继续尝试...');
+      /* 验证登录是否真正成功：最终 URL 必须包含教务系统域名 */
+      const loginSuccess = finalUrl.includes(EDU_HOST) || loginResponse.data?.includes?.(EDU_HOST);
+      if (!loginSuccess) {
+        /* 检查返回的 HTML 是否包含错误信息 */
+        const html = typeof loginResponse.data === 'string' ? loginResponse.data : '';
+        const errorMsg = html.match(/class="auth_error"[^>]*>([^<]+)/);
+        const errMsg = errorMsg ? errorMsg[1].trim() : '未知错误';
+        throw new Error(`登录未成功，服务端返回: ${errMsg}`);
       }
 
+      console.log('[EduProxy] 已成功重定向回教务系统');
       this.loggedIn = true;
       this.cookies = this._cookieList();
       console.log(`[EduProxy] 登录成功！共收集 ${Object.keys(this.cookieJar).length} 个 cookies`);
@@ -435,6 +445,7 @@ class EduProxy {
 
     } catch (error) {
       console.error('[EduProxy] 提交登录表单失败:', error.message);
+      this.loggedIn = false;
       throw new Error(`登录提交失败: ${error.message}`);
     }
   }
@@ -481,57 +492,153 @@ class EduProxy {
 
   /**
    * 登录后获取 studentId 和当前 semesterId
+   *
+   * 通过浏览器实际调试发现的正确 API 调用方式：
+   * 1. 访问课表页面 /student/for-std/course-table → 从 HTML 中提取 dataId (studentId)
+   * 2. 调用 /student/ws/semester/get/{id} 获取学期信息
+   * 3. 课表 API 需要 dataId + bizTypeId=2 参数
    */
   async _fetchStudentInfo() {
     try {
       console.log('[EduProxy] 正在获取学生信息...');
 
-      /* 方法1：从课表 API 获取参数 */
+      /*
+       * 方法1：从课表页面 HTML 中提取 studentId (dataId)
+       * 课表页面的 Thymeleaf 模板会将 studentId 渲染到 JS 变量中
+       * 前端 JS 使用 personId/dataId 来调用 get-data API
+       */
       try {
-        const res = await this.axiosInstance.get('/student/for-std/course-table/get-data', {
-          params: { semesterId: this.semesterId || '' },
+        const courseTableRes = await this.axiosInstance.get('/student/for-std/course-table', {
+          maxRedirects: 5,
+          headers: {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          },
         });
-        const data = res.data;
-        if (data && data.id) {
-          this.studentId = data.id;
-        }
-        if (data && data.semester && data.semester.id) {
-          this.semesterId = data.semester.id;
-          this.semesterName = data.semester.nameZh || '';
+
+        const html = typeof courseTableRes.data === 'string' ? courseTableRes.data : '';
+
+        /* 尝试从 HTML 中提取 personId / dataId / studentId */
+        const idPatterns = [
+          /personId\s*[:=]\s*['"]?(\d+)/,
+          /dataId\s*[:=]\s*['"]?(\d+)/,
+          /studentId\s*[:=]\s*['"]?(\d+)/,
+          /stdId\s*[:=]\s*['"]?(\d+)/,
+          /id\s*:\s*(\d{6,})/,
+        ];
+
+        for (const pattern of idPatterns) {
+          const match = html.match(pattern);
+          if (match && parseInt(match[1]) > 1000) {
+            this.studentId = parseInt(match[1]);
+            console.log(`[EduProxy] 从课表页面提取到 studentId: ${this.studentId}`);
+            break;
+          }
         }
       } catch (e) {
-        console.warn('[EduProxy] 通过课表 API 获取学生信息失败:', e.message);
+        console.warn('[EduProxy] 通过课表页面获取 studentId 失败:', e.message);
       }
 
-      /* 方法2：从课表页面重定向 URL 获取 semesterId */
+      /*
+       * 方法2：尝试常见的 semesterId（当前学期）
+       * 通过 /student/ws/semester/get/{id} 验证学期是否有效
+       * 浏览器调试发现当前学期 ID 为 81 (2025-2026学年第二学期)
+       * 先尝试从课表页面 HTML 中提取
+       */
       if (!this.semesterId) {
         try {
+          /* 尝试获取课表页面，从中提取 semesterId */
           const courseTableRes = await this.axiosInstance.get('/student/for-std/course-table', {
             maxRedirects: 5,
+            headers: {
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            },
           });
-          const redirectUrl = courseTableRes.request?.res?.responseUrl || '';
-          const semMatch = redirectUrl.match(/semester\/(\d+)/);
-          if (semMatch) {
-            this.semesterId = parseInt(semMatch[1]);
+
+          const html = typeof courseTableRes.data === 'string' ? courseTableRes.data : '';
+          const semPatterns = [
+            /semesterId\s*[:=]\s*['"]?(\d+)/,
+            /semester\.id\s*[:=]\s*['"]?(\d+)/,
+            /semesterId\/(\d+)/,
+          ];
+
+          for (const pattern of semPatterns) {
+            const match = html.match(pattern);
+            if (match) {
+              this.semesterId = parseInt(match[1]);
+              console.log(`[EduProxy] 从课表页面提取到 semesterId: ${this.semesterId}`);
+              break;
+            }
           }
         } catch (e) {
-          /* 忽略 */
+          console.warn('[EduProxy] 从课表页面提取 semesterId 失败:', e.message);
         }
       }
 
-      /* 方法3：通过成绩页面重定向获取 studentId */
+      /*
+       * 方法3：如果还没有 studentId，尝试通过成绩页面获取
+       * 成绩页面 URL 格式: /student/for-std/grade/sheet/info/{studentId}
+       */
       if (!this.studentId) {
         try {
           const gradeRes = await this.axiosInstance.get('/student/for-std/grade/sheet', {
             maxRedirects: 5,
+            headers: {
+              'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+            },
           });
           const gradeUrl = gradeRes.request?.res?.responseUrl || '';
           const gradeIdMatch = gradeUrl.match(/info\/(\d+)/);
           if (gradeIdMatch) {
             this.studentId = parseInt(gradeIdMatch[1]);
+            console.log(`[EduProxy] 从成绩页面重定向获取到 studentId: ${this.studentId}`);
+          }
+
+          /* 也尝试从 HTML 内容中提取 */
+          if (!this.studentId) {
+            const html = typeof gradeRes.data === 'string' ? gradeRes.data : '';
+            const gradeMatch = html.match(/info\/(\d{6,})/);
+            if (gradeMatch) {
+              this.studentId = parseInt(gradeMatch[1]);
+              console.log(`[EduProxy] 从成绩页面 HTML 获取到 studentId: ${this.studentId}`);
+            }
           }
         } catch (e) {
-          console.warn('[EduProxy] 通过成绩 API 获取 studentId 失败:', e.message);
+          console.warn('[EduProxy] 通过成绩页面获取 studentId 失败:', e.message);
+        }
+      }
+
+      /*
+       * 方法4：如果仍然没有 studentId，尝试调用课表 get-data API
+       * 使用 bizTypeId=2（学生课表），不带 dataId 看看返回什么
+       */
+      if (!this.studentId) {
+        try {
+          const res = await this.axiosInstance.get('/student/for-std/course-table/get-data', {
+            params: {
+              semesterId: this.semesterId || '',
+              bizTypeId: 2,
+            },
+          });
+          const data = res.data;
+          /* 尝试从响应中获取 studentId */
+          if (data) {
+            if (data.studentTableVms && Array.isArray(data.studentTableVms) && data.studentTableVms.length > 0) {
+              const vm = data.studentTableVms[0];
+              if (vm.dataId) {
+                this.studentId = vm.dataId;
+                console.log(`[EduProxy] 从课表 API studentTableVms 获取到 studentId: ${this.studentId}`);
+              } else if (vm.id) {
+                this.studentId = vm.id;
+                console.log(`[EduProxy] 从课表 API studentTableVms[0].id 获取到 studentId: ${this.studentId}`);
+              }
+            }
+            if (!this.semesterId && data.semester && data.semester.id) {
+              this.semesterId = data.semester.id;
+              this.semesterName = data.semester.nameZh || '';
+            }
+          }
+        } catch (e) {
+          console.warn('[EduProxy] 通过课表 API 获取学生信息失败:', e.message);
         }
       }
 
@@ -553,8 +660,19 @@ class EduProxy {
     try {
       console.log('[EduProxy] 正在通过 API 获取课表...');
 
-      const params = {};
+      /* 确保有 studentId */
+      if (!this.studentId) {
+        console.log('[EduProxy] studentId 未知，尝试获取...');
+        await this._fetchStudentInfo();
+      }
+
+      const params = {
+        bizTypeId: 2,  // 学生课表固定为 2
+      };
       if (this.semesterId) params.semesterId = this.semesterId;
+      if (this.studentId) params.dataId = this.studentId;
+
+      console.log(`[EduProxy] 课表请求参数: semesterId=${params.semesterId}, dataId=${params.dataId}, bizTypeId=${params.bizTypeId}`);
 
       const res = await this.axiosInstance.get('/student/for-std/course-table/get-data', {
         params,
@@ -610,6 +728,15 @@ class EduProxy {
 
   /**
    * 解析课表 API 返回的 JSON 数据
+   *
+   * 兼容两种 API 返回结构：
+   * 1. 新版结构（当前实际使用）：
+   *    data.studentTableVms[].activities[] → 每个 activity 包含
+   *      courseName, courseCode, lessonCode, lessonId, room, campus,
+   *      teachers[], weekday, startUnit, endUnit, weekIndexes[], weeksStr
+   *    data.lessons[] → 课程详细信息（通过 lessonId 引用）
+   * 2. 旧版结构（兼容）：
+   *    data.courseUnits[] → 每个单元包含 lesson, timeArrangement, room, teacher
    */
   _parseScheduleApiData(data) {
     const scheduleData = {};
@@ -617,13 +744,142 @@ class EduProxy {
       scheduleData[d] = [];
     }
 
-    const courseUnits = data.courseUnits || data.studentCourseUnits || [];
-    if (courseUnits.length === 0) {
-      console.warn('[EduProxy] courseUnits 为空，尝试其他数据字段...');
+    /* 构建 lessons 查找表（新版 API） */
+    const lessonsMap = {};
+    if (data.lessons) {
+      if (Array.isArray(data.lessons)) {
+        for (const lesson of data.lessons) {
+          if (lesson.id) lessonsMap[lesson.id] = lesson;
+        }
+      } else if (typeof data.lessons === 'object') {
+        Object.assign(lessonsMap, data.lessons);
+      }
     }
 
+    /* 提取所有 activities */
+    let activities = [];
+
+    /* 新版结构：studentTableVms[].activities */
+    const studentTableVms = data.studentTableVms || data.studentTableVm
+      ? (Array.isArray(data.studentTableVms) ? data.studentTableVms : [data.studentTableVm])
+      : [];
+
+    if (studentTableVms.length > 0) {
+      for (const vm of studentTableVms) {
+        if (vm.activities && Array.isArray(vm.activities)) {
+          activities = activities.concat(vm.activities);
+        }
+        /* 从 studentTableVms 中提取 studentId */
+        if (vm.dataId && !this.studentId) {
+          this.studentId = vm.dataId;
+        } else if (vm.id && !this.studentId) {
+          this.studentId = vm.id;
+        }
+      }
+      console.log(`[EduProxy] 从 studentTableVms 提取到 ${activities.length} 个 activities`);
+    }
+
+    /* 旧版结构兼容：courseUnits */
+    if (activities.length === 0) {
+      const courseUnits = data.courseUnits || data.studentCourseUnits || [];
+      if (courseUnits.length > 0) {
+        console.log('[EduProxy] 未找到 activities，尝试使用旧版 courseUnits 结构');
+        activities = this._convertCourseUnitsToActivities(courseUnits);
+      }
+    }
+
+    if (activities.length === 0) {
+      console.warn('[EduProxy] 未找到任何课程活动数据');
+    }
+
+    /* 解析 activities 为统一格式 */
     const courseCodeSet = {};
 
+    for (const act of activities) {
+      try {
+        const courseName = act.courseName || act.lessonName || '';
+        const courseCode = act.courseCode || act.code || '';
+        const lessonCode = act.lessonCode || '';
+
+        /* 获取课程详细信息 */
+        const lessonDetail = act.lessonId ? lessonsMap[act.lessonId] : null;
+        const lessonKind = lessonDetail?.lessonKind || lessonDetail?.cultivateType || {};
+        const kindName = lessonKind.nameZh || '';
+        const isElective = kindName.includes('选') || courseName.includes('（选）');
+        const type = isElective ? '选修' : '必修';
+
+        /* 时间信息 */
+        const weekDay = act.weekday || act.weekDay || 0;
+        const startSlot = (act.startUnit !== undefined ? act.startUnit : (act.startSlot !== undefined ? act.startSlot : 0));
+        const endSlot = (act.endUnit !== undefined ? act.endUnit : (act.endSlot !== undefined ? act.endSlot : startSlot));
+
+        /* 周次信息 */
+        const weekIndexes = act.weekIndexes || act.weeks || [];
+        let weeksStr = act.weeksStr || act.scheduleWeeksInfo || '';
+        if (!weeksStr && weekIndexes.length > 0) {
+          const sortedWeeks = [...weekIndexes].sort((a, b) => a - b);
+          if (sortedWeeks.length === 1) {
+            weeksStr = `${sortedWeeks[0]}周`;
+          } else {
+            weeksStr = `${sortedWeeks[0]}~${sortedWeeks[sortedWeeks.length - 1]}周`;
+          }
+        }
+
+        const timeStr = `${startSlot}-${endSlot}节`;
+
+        /* 地点信息 */
+        const room = act.room || '';
+        const campus = act.campus || '';
+        const location = campus && room ? `${campus} ${room}` : (room || campus || '');
+
+        /* 教师信息 */
+        let teacherName = '';
+        if (act.teachers && Array.isArray(act.teachers)) {
+          teacherName = act.teachers.map(t => typeof t === 'string' ? t.split('(')[0] : (t.nameZh || t.name || '')).join(', ');
+        } else if (act.teacher) {
+          teacherName = typeof act.teacher === 'string' ? act.teacher : (act.teacher.nameZh || act.teacher.teacherAssignmentString || '');
+        }
+
+        /* 去重 */
+        const dedupeKey = courseCode ? `${weekDay}-${courseCode}` : `${weekDay}-${courseName}-${timeStr}`;
+        if (courseCodeSet[dedupeKey]) continue;
+        courseCodeSet[dedupeKey] = true;
+
+        if (!courseName) continue;
+
+        const course = {
+          name: courseName.replace(/^（选）/, '').replace(/^\(选\)/, ''),
+          fullName: courseName,
+          code: courseCode,
+          teacher: teacherName,
+          location,
+          time: timeStr,
+          slot: startSlot,
+          endSlot,
+          day: weekDay,
+          weeks: weeksStr,
+          type,
+          enrollment: '',
+          color: 0,
+        };
+
+        const arrayIndex = weekDay - 1;
+        if (arrayIndex >= 0 && arrayIndex < 7) {
+          scheduleData[arrayIndex].push(course);
+        }
+      } catch (err) {
+        console.warn('[EduProxy] 解析课程活动失败:', err.message);
+      }
+    }
+
+    return scheduleData;
+  }
+
+  /**
+   * 将旧版 courseUnits 格式转换为 activities 格式（兼容旧 API）
+   */
+  _convertCourseUnitsToActivities(courseUnits) {
+    const activities = [];
     for (const unit of courseUnits) {
       try {
         const lesson = unit.lesson || {};
@@ -632,75 +888,26 @@ class EduProxy {
         const teacher = unit.teacher || {};
         const building = room.building || room.campus || {};
 
-        const nameZh = lesson.nameZh || '';
-        const codeObj = lesson.code || {};
-        const code = codeObj.code || '';
-
-        const lessonKind = lesson.lessonKind || {};
-        const kindName = lessonKind.nameZh || '';
-        const isElective = kindName.includes('选') || nameZh.includes('（选）');
-        const type = isElective ? '选修' : '必修';
-
-        const weekDay = time.weekDay || 0;
-        const startSlot = time.startSlot !== undefined ? time.startSlot : 0;
-        const endSlot = time.endSlot !== undefined ? time.endSlot : startSlot;
-        const weeks = time.weeks || unit.suggestScheduleWeeks || [];
-
-        let weeksStr = '';
-        if (weeks.length > 0) {
-          const sortedWeeks = [...weeks].sort((a, b) => a - b);
-          if (sortedWeeks.length === 1) {
-            weeksStr = `${sortedWeeks[0]}周`;
-          } else {
-            weeksStr = `${sortedWeeks[0]}~${sortedWeeks[sortedWeeks.length - 1]}周`;
-          }
-        }
-
-        const timeStr = `${startSlot + 1}-${endSlot + 1}节`;
-
-        const buildingName = building.nameZh || '';
-        const roomName = room.nameZh || room.name || '';
-        const location = buildingName && roomName ? `${buildingName} ${roomName}` : roomName;
-
-        const teacherName = teacher.nameZh || teacher.teacherAssignmentString || '';
-
-        const stdCount = unit.stdCount || 0;
-        const limitCount = unit.limitCount || 0;
-        const enrollment = stdCount > 0 || limitCount > 0 ? `${stdCount}/${limitCount}` : '';
-
-        const dayIndex = weekDay;
-        const dedupeKey = code ? `${dayIndex}-${code}` : `${dayIndex}-${nameZh}-${timeStr}`;
-        if (courseCodeSet[dedupeKey]) continue;
-        courseCodeSet[dedupeKey] = true;
-
-        if (!nameZh) continue;
-
-        const course = {
-          name: nameZh.replace(/^（选）/, '').replace(/^\(选\)/, ''),
-          fullName: nameZh,
-          code,
-          teacher: teacherName,
-          location,
-          time: timeStr,
-          slot: startSlot,
-          endSlot,
-          day: dayIndex,
-          weeks: weeksStr,
-          type,
-          enrollment,
-          color: 0,
-        };
-
-        const arrayIndex = dayIndex - 1;
-        if (arrayIndex >= 0 && arrayIndex < 7) {
-          scheduleData[arrayIndex].push(course);
-        }
+        activities.push({
+          courseName: lesson.nameZh || '',
+          courseCode: (lesson.code || {}).code || '',
+          lessonCode: '',
+          lessonId: lesson.id || '',
+          room: room.nameZh || room.name || '',
+          campus: building.nameZh || '',
+          teachers: teacher.nameZh ? [teacher.nameZh] : [],
+          weekday: time.weekDay || 0,
+          startUnit: (time.startSlot !== undefined ? time.startSlot + 1 : 0),
+          endUnit: (time.endSlot !== undefined ? time.endSlot + 1 : 0),
+          weekIndexes: time.weeks || unit.suggestScheduleWeeks || [],
+          weeksStr: '',
+          scheduleWeeksInfo: '',
+        });
       } catch (err) {
-        console.warn('[EduProxy] 解析课程单元失败:', err.message);
+        console.warn('[EduProxy] 转换 courseUnit 失败:', err.message);
       }
     }
-
-    return scheduleData;
+    return activities;
   }
 
   /**
@@ -708,8 +915,11 @@ class EduProxy {
    */
   async _fetchMoocCourses() {
     try {
-      const params = {};
+      const params = {
+        bizTypeId: 2,
+      };
       if (this.semesterId) params.semesterId = this.semesterId;
+      if (this.studentId) params.dataId = this.studentId;
 
       const res = await this.axiosInstance.get('/student/for-std/course-table/get-all-data', {
         params,
@@ -719,18 +929,39 @@ class EduProxy {
       const data = res.data;
       if (!data) return [];
 
-      const allUnits = data.courseUnits || data.studentCourseUnits || [];
+      /* 兼容新旧两种 API 结构 */
+      let allUnits = [];
+
+      /* 新版结构：studentTableVms[].activities */
+      const studentTableVms = data.studentTableVms || data.studentTableVm
+        ? (Array.isArray(data.studentTableVms) ? data.studentTableVms : [data.studentTableVm])
+        : [];
+
+      if (studentTableVms.length > 0) {
+        for (const vm of studentTableVms) {
+          if (vm.activities && Array.isArray(vm.activities)) {
+            allUnits = allUnits.concat(vm.activities);
+          }
+        }
+      }
+
+      /* 旧版结构兼容 */
+      if (allUnits.length === 0) {
+        allUnits = data.courseUnits || data.studentCourseUnits || [];
+      }
       const moocCourses = [];
       const seen = new Set();
 
       for (const unit of allUnits) {
         try {
+          /* 兼容 activities 格式和 courseUnits 格式 */
+          const isActivity = !!unit.courseName;
           const lesson = unit.lesson || {};
-          const nameZh = lesson.nameZh || '';
-          const lessonKind = lesson.lessonKind || {};
-          const kindName = lessonKind.nameZh || '';
+          const nameZh = isActivity ? (unit.courseName || '') : (lesson.nameZh || '');
+          const lessonKind = isActivity ? {} : (lesson.lessonKind || {});
+          const kindName = isActivity ? '' : (lessonKind.nameZh || '');
           const virtualRoom = unit.virtualRoom || {};
-          const remark = unit.remark || lesson.remark || '';
+          const remark = isActivity ? (unit.remark || '') : (unit.remark || lesson.remark || '');
 
           const isMooc = nameZh.includes('MOOC') ||
                          kindName.includes('MOOC') ||

@@ -355,18 +355,7 @@ function UserProfile() {
     let gradesOk = false
 
     try {
-      /* 先获取课表 */
-      try {
-        const res = await fetch(`${API.edu}/schedule?userId=${user.id}`)
-        if (res.ok) {
-          const data = await res.json()
-          if (data.success) { scheduleOk = true }
-        }
-      } catch (err) {
-        console.warn('[UserPage] 课表同步失败:', err)
-      }
-
-      /* 再获取成绩 */
+      /* 先获取成绩（不需要 semesterId，同时能帮助后端获取 semesterId） */
       try {
         const res = await fetch(`${API.edu}/grades?userId=${user.id}`)
         if (res.ok) {
@@ -377,7 +366,18 @@ function UserProfile() {
         console.warn('[UserPage] 成绩同步失败:', err)
       }
 
-      /* 获取完毕，关闭浏览器 */
+      /* 再获取课表（此时后端已从成绩数据中获取到 semesterId） */
+      try {
+        const res = await fetch(`${API.edu}/schedule?userId=${user.id}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (data.success) { scheduleOk = true }
+        }
+      } catch (err) {
+        console.warn('[UserPage] 课表同步失败:', err)
+      }
+
+      /* 获取完毕，关闭教务会话 */
       try {
         await fetch(`${API.edu}/logout?userId=${user.id}`, { method: 'POST' })
       } catch (err) { /* ignore */ }

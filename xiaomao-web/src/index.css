@@ -2371,6 +2371,11 @@ select {
     display: block;
   }
 
+  /* 编辑随记时隐藏底部导航 */
+  body.hide-bottom-nav .bottom-nav {
+    display: none !important;
+  }
+
   /* 项目B：移动端底部导航样式覆盖 */
   .bottom-nav {
     height: calc(var(--bottom-nav-height) + var(--safe-area-bottom));

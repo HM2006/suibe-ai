@@ -57,14 +57,25 @@ function useRoomData() {
 /* ========== 表格总览 ========== */
 function OverviewTab({ data, buildings, dates, getEmpty }) {
   const [date, setDate] = useState('')
-  const [period, setPeriod] = useState(1)
-  const [showFreeOnly, setShowFreeOnly] = useState(false)
+  const [period, setPeriod] = useState(null)
 
-  // 初始化日期
+  // 根据当前时间计算当前节次
+  const getCurrentPeriod = () => {
+    const now = new Date()
+    const mins = now.getHours() * 60 + now.getMinutes()
+    const starts = [495,540,595,640,685,780,825,880,925,970,1080,1125,1180,1225]
+    for (let i = starts.length - 1; i >= 0; i--) {
+      if (mins >= starts[i]) return i + 1
+    }
+    return 1
+  }
+
+  // 初始化日期和节次
   useEffect(() => {
     if (dates.length === 0) return
     const today = getToday()
     setDate(dates.includes(today) ? today : dates[0])
+    setPeriod(getCurrentPeriod())
   }, [dates])
 
   const stats = useMemo(() => {
@@ -264,30 +275,14 @@ function OverviewTab({ data, buildings, dates, getEmpty }) {
   )
 }
 
-/* ========== AI 对话（纯 React） ========== */
+/* ========== 智能查找（表单式） ========== */
 function AiTab({ data, buildings, dates }) {
-  const chatRef = useRef(null)
-  const [step, setStep] = useState(0)
-  const [selectedDate, setSelectedDate] = useState(null)
+  const today = getToday()
+  const futureDates = dates.filter(d => d >= today).slice(0, 8)
+  const [selectedDate, setSelectedDate] = useState(futureDates[0] || dates[0] || '')
   const [selectedPeriods, setSelectedPeriods] = useState([])
   const [minSeats, setMinSeats] = useState(0)
-
-  useEffect(() => {
-    if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight
-  }, [step, selectedDate, selectedPeriods, minSeats])
-
-  const start = () => { setStep(1); setSelectedDate(null); setSelectedPeriods([]); setMinSeats(0) }
-
-  const Msg = ({ role, children }) => (
-    <div style={{ marginBottom: '14px', display: 'flex', gap: '10px', flexDirection: role === 'user' ? 'row-reverse' : 'row', animation: 'fadeIn 0.3s ease' }}>
-      <div style={{ width: '34px', height: '34px', borderRadius: '50%', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '15px', background: role === 'ai' ? 'linear-gradient(135deg, #667eea, #764ba2)' : '#1890ff', color: '#fff' }}>
-        {role === 'ai' ? '🤖' : '👤'}
-      </div>
-      <div style={{ maxWidth: '80%', padding: '10px 14px', borderRadius: '12px', fontSize: '13px', lineHeight: '1.6', background: role === 'ai' ? 'var(--card-bg)' : 'var(--primary)', color: role === 'ai' ? 'var(--text-primary)' : '#fff', border: role === 'ai' ? '1px solid var(--card-border)' : 'none', borderTopLeftRadius: role === 'ai' ? '4px' : '12px', borderTopRightRadius: role === 'user' ? '4px' : '12px' }}>
-        {children}
-      </div>
-    </div>
-  )
+  const [showResult, setShowResult] = useState(false)
 
   const togglePeriod = (p) => {
     setSelectedPeriods(prev => prev.includes(p) ? prev.filter(x => x !== p).sort((a, b) => a - b) : [...prev, p].sort((a, b) => a - b))
@@ -298,9 +293,8 @@ function AiTab({ data, buildings, dates }) {
     { label: '80人以上', value: 80 }, { label: '100人以上', value: 100 }, { label: '150人以上', value: 150 },
   ]
 
-  // 查询逻辑
   const searchResults = (() => {
-    if (step < 4 || !selectedDate || selectedPeriods.length === 0) return null
+    if (!showResult || !selectedDate || selectedPeriods.length === 0) return null
     const periods = selectedPeriods.slice().sort((a, b) => a - b)
     const exact = []
     buildings.forEach(bn => {
@@ -312,7 +306,6 @@ function AiTab({ data, buildings, dates }) {
       })
     })
     exact.sort((a, b) => a.seats - b.seats)
-
     let alt = []
     if (exact.length === 0) {
       if (minSeats > 0) {
@@ -340,139 +333,111 @@ function AiTab({ data, buildings, dates }) {
     return { exact, alt, periods }
   })()
 
-  const today = getToday()
-  const futureDates = dates.filter(d => d >= today).slice(0, 8)
+  const cardStyle = { background: 'var(--card-bg)', borderRadius: '14px', border: '1px solid var(--card-border)', padding: '16px', marginBottom: '12px' }
+  const labelStyle = { display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px', fontSize: '13px', color: 'var(--text-secondary)', fontWeight: 500 }
+  const btnStyle = (active) => ({
+    padding: '7px 14px', borderRadius: '20px', border: '1.5px solid',
+    borderColor: active ? 'var(--primary)' : 'var(--card-border)',
+    background: active ? 'var(--primary)' : 'var(--card-bg)',
+    color: active ? '#fff' : 'var(--text-secondary)',
+    cursor: 'pointer', fontSize: '12px', fontWeight: active ? 600 : 400,
+  })
 
   return (
     <div>
-      <div ref={chatRef} style={{ minHeight: '380px', maxHeight: '560px', overflowY: 'auto', padding: '16px', background: 'var(--bg)', borderRadius: '14px', marginBottom: '12px', border: '1px solid var(--card-border)' }}>
+      {/* 日期选择 */}
+      <div style={cardStyle}>
+        <div style={labelStyle}><Calendar size={14} /> 选择日期</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {futureDates.map(d => (
+            <button key={d} onClick={() => { setSelectedDate(d); setShowResult(false) }}
+              style={btnStyle(selectedDate === d)}>
+              {d}（{getWeekday(d)}）
+            </button>
+          ))}
+        </div>
+      </div>
 
-        {step === 0 && (
-          <div style={{ textAlign: 'center', padding: '50px 20px' }}>
-            <div style={{ fontSize: '36px', marginBottom: '12px' }}>🤖</div>
-            <h2 style={{ fontSize: '18px', marginBottom: '8px', color: 'var(--text-primary)' }}>智能空教室助手</h2>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '20px', fontSize: '13px' }}>告诉我你的需求，我来帮你找到最合适的空教室</p>
-            <button onClick={start} style={{ padding: '12px 36px', borderRadius: '25px', border: 'none', background: 'var(--primary)', color: '#fff', fontSize: '15px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(79,70,229,0.3)' }}>开始对话</button>
+      {/* 节次选择 */}
+      <div style={cardStyle}>
+        <div style={labelStyle}><Clock size={14} /> 选择时间段（可多选）</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px' }}>
+          {Array.from({ length: 14 }, (_, i) => i + 1).map(p => (
+            <button key={p} onClick={() => { togglePeriod(p); setShowResult(false) }}
+              style={btnStyle(selectedPeriods.includes(p))}>
+              {PERIODS[p]}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 座位数 */}
+      <div style={cardStyle}>
+        <div style={labelStyle}><Users size={14} /> 座位数要求</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+          {seatOptions.map(opt => (
+            <button key={opt.value} onClick={() => { setMinSeats(opt.value); setShowResult(false) }}
+              style={btnStyle(minSeats === opt.value)}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 查询按钮 */}
+      <button onClick={() => setShowResult(true)} disabled={selectedPeriods.length === 0}
+        style={{
+          width: '100%', padding: '12px', borderRadius: '12px', border: 'none',
+          background: selectedPeriods.length === 0 ? 'var(--card-border)' : 'var(--primary)',
+          color: selectedPeriods.length === 0 ? 'var(--text-muted)' : '#fff',
+          fontSize: '15px', fontWeight: 600, cursor: selectedPeriods.length === 0 ? 'not-allowed' : 'pointer',
+          boxShadow: selectedPeriods.length === 0 ? 'none' : '0 4px 15px rgba(79,70,229,0.3)',
+          marginBottom: '16px',
+        }}>
+        🔍 查找空教室
+      </button>
+
+      {/* 结果 */}
+      {showResult && searchResults && (
+        <div style={cardStyle}>
+          <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '4px' }}>
+            📋 查询结果：{selectedDate}（{getWeekday(selectedDate)}）{searchResults.periods.map(p => PERIODS[p]).join('、')}
+            {minSeats > 0 && ` · 至少${minSeats}人`}
           </div>
-        )}
-
-        {step >= 1 && (
-          <Msg role="ai">你好！我是空教室查询助手 😊<br />让我来帮你找到合适的空教室吧！</Msg>
-        )}
-
-        {step === 1 && (
-          <>
-            <Msg role="ai">
-              📅 <strong>第一步：选择日期</strong><br />你需要查询哪一天的空教室？
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
-                {futureDates.map(d => (
-                  <button key={d} onClick={() => { setSelectedDate(d); setStep(2) }}
-                    style={{ padding: '7px 14px', borderRadius: '20px', border: '1.5px solid var(--primary)', background: '#fff', color: 'var(--primary)', cursor: 'pointer', fontSize: '12px' }}>
-                    {d}（{getWeekday(d)}）
-                  </button>
+          {searchResults.exact.length > 0 ? (
+            <>
+              <div style={{ fontSize: '12px', color: '#059669', marginBottom: '10px' }}>
+                ✅ 找到 <strong>{searchResults.exact.length}</strong> 间符合条件的空教室
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {searchResults.exact.map(r => (
+                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '10px', background: 'var(--bg)', border: '1px solid var(--card-border)' }}>
+                    <span style={{ fontWeight: 500, fontSize: '14px', color: 'var(--text-primary)' }}>{r.building} · {r.name}</span>
+                    <span style={{ fontSize: '11px', color: 'var(--text-muted)', background: '#EEF2FF', padding: '2px 8px', borderRadius: '8px', color: '#4F46E5' }}>💺 {r.seats}座</span>
+                  </div>
                 ))}
               </div>
-            </Msg>
-          </>
-        )}
-
-        {step >= 2 && selectedDate && (
-          <Msg role="user">{selectedDate}（{getWeekday(selectedDate)}）</Msg>
-        )}
-
-        {step === 2 && (
-          <Msg role="ai">
-            ⏰ <strong>第二步：选择时间段</strong><br />你需要哪个时间段空闲的教室？（可多选）
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '5px', marginTop: '8px' }}>
-              {Array.from({ length: 14 }, (_, i) => i + 1).map(p => (
-                <button key={p} onClick={() => togglePeriod(p)}
-                  style={{ padding: '5px 10px', borderRadius: '16px', border: '1.5px solid', borderColor: selectedPeriods.includes(p) ? 'var(--primary)' : 'var(--card-border)', background: selectedPeriods.includes(p) ? 'var(--primary)' : 'var(--card-bg)', color: selectedPeriods.includes(p) ? '#fff' : 'var(--text-secondary)', cursor: 'pointer', fontSize: '12px' }}>
-                  {PERIODS[p]}
-                </button>
-              ))}
-            </div>
-            <div style={{ marginTop: '8px' }}>
-              <button onClick={() => { if (selectedPeriods.length === 0) return; setStep(3) }}
-                style={{ padding: '7px 14px', borderRadius: '20px', border: '1.5px solid var(--primary)', background: '#fff', color: 'var(--primary)', cursor: 'pointer', fontSize: '12px' }}>
-                ✅ 确认选择
-              </button>
-            </div>
-          </Msg>
-        )}
-
-        {step >= 3 && selectedPeriods.length > 0 && (
-          <Msg role="user">{selectedPeriods.sort((a, b) => a - b).map(p => PERIODS[p]).join('、')}</Msg>
-        )}
-
-        {step === 3 && (
-          <Msg role="ai">
-            👥 <strong>第三步：座位数要求</strong><br />对教室的座位数有要求吗？
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '8px' }}>
-              {seatOptions.map(opt => (
-                <button key={opt.value} onClick={() => { setMinSeats(opt.value); setStep(4) }}
-                  style={{ padding: '7px 14px', borderRadius: '20px', border: '1.5px solid var(--primary)', background: '#fff', color: 'var(--primary)', cursor: 'pointer', fontSize: '12px' }}>
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-          </Msg>
-        )}
-
-        {step >= 4 && (
-          <Msg role="user">{minSeats > 0 ? `至少${minSeats}人` : '不限座位数'}</Msg>
-        )}
-
-        {step >= 4 && searchResults && (
-          <Msg role="ai">
-            <div>
-              🔍 <strong>查询结果</strong><br /><br />
-              📅 日期：{selectedDate}（{getWeekday(selectedDate)}）<br />
-              ⏰ 时间：{searchResults.periods.map(p => PERIODS[p]).join('、')}<br />
-              👥 座位要求：{minSeats > 0 ? `至少${minSeats}人` : '不限'}<br /><br />
-              {searchResults.exact.length > 0 ? (
+            </>
+          ) : (
+            <>
+              <div style={{ fontSize: '12px', color: '#DC2626', marginBottom: '10px' }}>❌ 没有完全符合条件的教室</div>
+              {searchResults.alt.length > 0 && (
                 <>
-                  ✅ 找到 <strong>{searchResults.exact.length}</strong> 间符合条件的空教室：<br /><br />
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px', marginTop: '10px' }}>
-                    {searchResults.exact.map(r => (
-                      <div key={r.id} style={{ border: '1px solid var(--card-border)', borderRadius: '10px', padding: '12px', background: 'var(--card-bg)' }}>
-                        <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px', color: 'var(--text-primary)' }}>{r.building} · {r.name}</div>
-                        <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}><span style={{ display: 'inline-block', background: '#EEF2FF', color: '#4F46E5', padding: '2px 7px', borderRadius: '8px', fontSize: '11px' }}>💺 {r.seats}座</span></div>
+                  <div style={{ fontSize: '12px', color: '#D97706', marginBottom: '8px' }}>💡 推荐接近的教室：</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                    {searchResults.alt.slice(0, 12).map(r => (
+                      <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', borderRadius: '10px', background: '#FFFBEB', border: '1px solid #FDE68A' }}>
+                        <span style={{ fontWeight: 500, fontSize: '14px', color: 'var(--text-primary)' }}>{r.building} · {r.name}</span>
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>💺 {r.seats}座 · {r.reason}</span>
                       </div>
                     ))}
                   </div>
                 </>
-              ) : (
-                <>
-                  ❌ 很抱歉，没有找到完全符合条件的教室。<br /><br />
-                  {searchResults.alt.length > 0 ? (
-                    <>
-                      💡 为你推荐以下最接近的教室：<br /><br />
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: '10px', marginTop: '10px' }}>
-                        {searchResults.alt.slice(0, 12).map(r => (
-                          <div key={r.id} style={{ border: '1px solid #F59E0B', borderRadius: '10px', padding: '12px', background: '#FFFBEB' }}>
-                            <div style={{ fontWeight: 600, fontSize: '14px', marginBottom: '4px', color: 'var(--text-primary)' }}>
-                              {r.building} · {r.name}
-                              <span style={{ display: 'inline-block', background: '#F59E0B', color: '#fff', padding: '1px 5px', borderRadius: '6px', fontSize: '10px', marginLeft: '4px' }}>接近匹配</span>
-                            </div>
-                            <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>
-                              <span style={{ display: 'inline-block', background: '#EEF2FF', color: '#4F46E5', padding: '2px 7px', borderRadius: '8px', fontSize: '11px' }}>💺 {r.seats}座</span> · {r.reason}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </>
-                  ) : (
-                    '😔 该日期所有教室在所选时间段均已被占用。建议更换日期或时间段。'
-                  )}
-                </>
               )}
-              <div style={{ marginTop: '12px' }}>
-                <button onClick={start} style={{ padding: '7px 14px', borderRadius: '20px', border: '1.5px solid var(--primary)', background: '#fff', color: 'var(--primary)', cursor: 'pointer', fontSize: '12px' }}>🔄 重新查询</button>
-              </div>
-            </div>
-          </Msg>
-        )}
-      </div>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }

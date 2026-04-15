@@ -143,6 +143,12 @@ function NoteEditor({ initialNote, courses, token, onSave, onDelete, onBack }) {
 
   /* visualViewport 键盘适配 */
   const [keyboardHeight, setKeyboardHeight] = useState(0)
+
+  /* 编辑模式下隐藏底部导航栏 */
+  useEffect(() => {
+    document.body.classList.add('hide-bottom-nav')
+    return () => { document.body.classList.remove('hide-bottom-nav') }
+  }, [])
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false)
 
   const fileInputRef = useRef(null)

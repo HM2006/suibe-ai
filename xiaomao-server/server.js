@@ -72,6 +72,58 @@ app.use((req, res, next) => {
 // 提供public目录下的静态文件
 app.use(express.static(path.join(__dirname, 'public')));
 
+// ==================== 奖学金名单 API ====================
+const fs = require('fs');
+const scholarshipData = JSON.parse(
+  fs.readFileSync(path.join(__dirname, 'data/scholarship-2025-2026-1.json'), 'utf-8')
+);
+
+app.get('/api/scholarship/list', (req, res) => {
+  try {
+    const { college, grade, level, search, page = 1, pageSize = 50 } = req.query;
+    let filtered = [...scholarshipData];
+
+    if (college) filtered = filtered.filter(s => s['学院名称'] === college);
+    if (grade) filtered = filtered.filter(s => s['年级'] === grade);
+    if (level) filtered = filtered.filter(s => s['奖学金等级'] === level);
+    if (search) {
+      const q = search.trim().toLowerCase();
+      filtered = filtered.filter(s =>
+        s['姓名'].toLowerCase().includes(q) || s['学号'].includes(q)
+      );
+    }
+
+    const total = filtered.length;
+    const start = (parseInt(page) - 1) * parseInt(pageSize);
+    const paged = filtered.slice(start, start + parseInt(pageSize));
+
+    res.json({
+      success: true,
+      data: {
+        list: paged,
+        total,
+        page: parseInt(page),
+        pageSize: parseInt(pageSize),
+        totalPages: Math.ceil(total / parseInt(pageSize)),
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+app.get('/api/scholarship/filters', (req, res) => {
+  res.json({
+    success: true,
+    data: {
+      colleges: [...new Set(scholarshipData.map(s => s['学院名称']))].sort(),
+      grades: [...new Set(scholarshipData.map(s => s['年级']))].sort(),
+      levels: [...new Set(scholarshipData.map(s => s['奖学金等级']))].sort(),
+      total: scholarshipData.length,
+    }
+  });
+});
+
 // ==================== API路由挂载 ====================
 
 // 健康检查接口

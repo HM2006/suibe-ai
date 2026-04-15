@@ -1,6 +1,6 @@
 /* ========================================
-   小贸 - 奖学金综合测评计算器
-   分步向导式页面，计算综合测评分数
+   小贸 - 奖学金页面
+   包含：综合测评计算器 + 奖学金名单查看
    ======================================== */
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Link } from 'react-router-dom'
@@ -20,9 +20,14 @@ import {
   CheckCircle,
   Loader,
   Info,
+  Search,
+  Filter,
+  Users,
+  Award,
+  ChevronDown,
 } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
-import { API } from '../config/api'
+import { API, API_BASE } from '../config/api'
 
 /* 参评学期 */
 const TARGET_SEMESTER = '2025-2026-1'
@@ -165,9 +170,9 @@ async function extractPdfText(file) {
 }
 
 /* ========================================
-   主组件
+   综合测评计算器（原子组件）
    ======================================== */
-function ScholarshipPage() {
+function ScholarshipCalculator() {
   const { user, token } = useUser()
 
   /* 向导状态 */
@@ -1401,6 +1406,371 @@ function ScholarshipPage() {
 
       {/* 导航按钮（结果页不显示） */}
       {currentStep < STEPS.length - 1 && renderNavButtons()}
+    </div>
+  )
+}
+
+/* ========================================
+   奖学金名单查看组件
+   ======================================== */
+function ScholarshipList() {
+  const [list, setList] = useState([])
+  const [filters, setFilters] = useState({ colleges: [], grades: [], levels: [], total: 0 })
+  const [loading, setLoading] = useState(true)
+  const [college, setCollege] = useState('')
+  const [grade, setGrade] = useState('')
+  const [level, setLevel] = useState('')
+  const [search, setSearch] = useState('')
+  const [page, setPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [total, setTotal] = useState(0)
+  const pageSize = 30
+
+  useEffect(() => {
+    fetch(`${API_BASE}/scholarship/filters`)
+      .then(r => r.json())
+      .then(d => { if (d.success) setFilters(d.data) })
+      .catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    setLoading(true)
+    const params = new URLSearchParams()
+    if (college) params.set('college', college)
+    if (grade) params.set('grade', grade)
+    if (level) params.set('level', level)
+    if (search) params.set('search', search)
+    params.set('page', page)
+    params.set('pageSize', pageSize)
+
+    fetch(`${API_BASE}/scholarship/list?${params}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.success) {
+          setList(d.data.list)
+          setTotal(d.data.total)
+          setTotalPages(d.data.totalPages)
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
+  }, [college, grade, level, search, page])
+
+  const resetFilters = () => {
+    setCollege(''); setGrade(''); setLevel(''); setSearch(''); setPage(1)
+  }
+
+  const hasFilter = college || grade || level || search
+
+  const levelColors = {
+    '特等奖学金': '#FF6B6B',
+    '一等奖学金': '#FF9F43',
+    '二等奖学金': '#FECA57',
+    '三等奖学金': '#48DBFB',
+    '单项奖学金': '#A29BFE',
+  }
+
+  const selectStyle = {
+    padding: '8px 32px 8px 12px',
+    borderRadius: 'var(--radius-md)',
+    border: '1px solid var(--card-border)',
+    background: 'var(--card-bg)',
+    color: 'var(--text-primary)',
+    fontSize: '13px',
+    appearance: 'none',
+    backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E")`,
+    backgroundRepeat: 'no-repeat',
+    backgroundPosition: 'right 10px center',
+    cursor: 'pointer',
+    minWidth: '130px',
+  }
+
+  return (
+    <div style={{ padding: '24px', maxWidth: '900px', margin: '0 auto' }}>
+      {/* 页面标题 */}
+      <div style={{ marginBottom: '24px' }}>
+        <h1 style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '20px', fontWeight: 700, color: 'var(--text-primary)' }}>
+          <Award size={24} style={{ color: 'var(--primary)' }} />
+          2025-2026学年第一学期奖学金名单
+        </h1>
+        <p style={{ fontSize: '14px', color: 'var(--text-secondary)', marginTop: '4px' }}>
+          共 <strong>{filters.total || total}</strong> 名同学获奖
+        </p>
+      </div>
+
+      {/* 公告卡片 */}
+      <div style={{
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        borderRadius: 'var(--radius-lg)',
+        padding: '20px 24px',
+        marginBottom: '20px',
+        color: 'white',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '16px',
+      }}>
+        <div style={{
+          width: '48px', height: '48px', borderRadius: '50%',
+          background: 'rgba(255,255,255,0.2)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          flexShrink: 0,
+        }}>
+          <Trophy size={24} />
+        </div>
+        <div>
+          <h3 style={{ fontSize: '16px', fontWeight: 700, margin: 0 }}>奖学金名单已发布</h3>
+          <p style={{ fontSize: '13px', margin: '4px 0 0', opacity: 0.9 }}>
+            2025-2026学年第一学期奖学金评审结果已公布，请查看获奖名单
+          </p>
+        </div>
+      </div>
+
+      {/* 筛选栏 */}
+      <div style={{
+        background: 'var(--card-bg)',
+        border: '1px solid var(--card-border)',
+        borderRadius: 'var(--radius-lg)',
+        padding: '16px',
+        marginBottom: '16px',
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px', flexWrap: 'wrap' }}>
+          <Filter size={14} style={{ color: 'var(--text-muted)' }} />
+          <span style={{ fontSize: '13px', color: 'var(--text-muted)', fontWeight: 500 }}>筛选条件</span>
+          {hasFilter && (
+            <button onClick={resetFilters} style={{
+              fontSize: '12px', color: 'var(--primary)', background: 'none', border: 'none',
+              cursor: 'pointer', padding: '2px 8px', borderRadius: '4px',
+            }}>
+              清除筛选
+            </button>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+          <select value={college} onChange={e => { setCollege(e.target.value); setPage(1) }} style={selectStyle}>
+            <option value="">全部学院</option>
+            {filters.colleges.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+          <select value={grade} onChange={e => { setGrade(e.target.value); setPage(1) }} style={selectStyle}>
+            <option value="">全部年级</option>
+            {filters.grades.map(g => <option key={g} value={g}>{g}</option>)}
+          </select>
+          <select value={level} onChange={e => { setLevel(e.target.value); setPage(1) }} style={selectStyle}>
+            <option value="">全部等级</option>
+            {filters.levels.map(l => <option key={l} value={l}>{l}</option>)}
+          </select>
+          <div style={{ position: 'relative', flex: 1, minWidth: '180px' }}>
+            <Search size={14} style={{
+              position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)',
+              color: 'var(--text-muted)',
+            }} />
+            <input
+              type="text"
+              placeholder="搜索姓名 / 学号"
+              value={search}
+              onChange={e => { setSearch(e.target.value); setPage(1) }}
+              style={{
+                width: '100%', padding: '8px 12px 8px 32px',
+                borderRadius: 'var(--radius-md)',
+                border: '1px solid var(--card-border)',
+                background: 'var(--bg-secondary)',
+                color: 'var(--text-primary)',
+                fontSize: '13px',
+                outline: 'none',
+                boxSizing: 'border-box',
+              }}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* 结果统计 */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', padding: '0 4px' }}>
+        <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+          {hasFilter ? `筛选结果：${total} 条` : `共 ${total} 条记录`}
+        </span>
+      </div>
+
+      {/* 表格 */}
+      <div style={{
+        background: 'var(--card-bg)',
+        border: '1px solid var(--card-border)',
+        borderRadius: 'var(--radius-lg)',
+        overflow: 'hidden',
+      }}>
+        {/* 表头 */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '60px 1fr 120px 100px 120px',
+          padding: '12px 16px',
+          fontSize: '12px',
+          fontWeight: 600,
+          color: 'var(--text-secondary)',
+          background: 'var(--bg-secondary)',
+          borderBottom: '1px solid var(--card-border)',
+        }}>
+          <span>#</span>
+          <span>姓名</span>
+          <span>学号</span>
+          <span>学院</span>
+          <span style={{ textAlign: 'center' }}>奖学金等级</span>
+        </div>
+
+        {/* 数据行 */}
+        {loading ? (
+          <div style={{ padding: '48px', textAlign: 'center' }}>
+            <Loader size={24} style={{ color: 'var(--primary)', animation: 'spin 1s linear infinite', margin: '0 auto 12px' }} />
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)' }}>加载中...</p>
+          </div>
+        ) : list.length === 0 ? (
+          <div style={{ padding: '48px', textAlign: 'center' }}>
+            <Users size={32} style={{ color: 'var(--text-muted)', margin: '0 auto 12px' }} />
+            <p style={{ fontSize: '14px', color: 'var(--text-muted)' }}>暂无匹配的获奖记录</p>
+          </div>
+        ) : (
+          list.map((item, idx) => {
+            const lColor = levelColors[item['奖学金等级']] || 'var(--primary)'
+            return (
+              <div key={item['学号']} style={{
+                display: 'grid',
+                gridTemplateColumns: '60px 1fr 120px 100px 120px',
+                padding: '10px 16px',
+                fontSize: '13px',
+                borderBottom: '1px solid var(--card-border)',
+                background: idx % 2 === 0 ? 'var(--card-bg)' : 'var(--bg-secondary)',
+                alignItems: 'center',
+              }}>
+                <span style={{ color: 'var(--text-muted)', fontSize: '12px' }}>
+                  {(page - 1) * pageSize + idx + 1}
+                </span>
+                <span style={{ fontWeight: 500, color: 'var(--text-primary)' }}>
+                  {item['姓名']}
+                </span>
+                <span style={{ color: 'var(--text-secondary)', fontFamily: 'monospace', fontSize: '12px' }}>
+                  {item['学号']}
+                </span>
+                <span style={{
+                  color: 'var(--text-secondary)', fontSize: '12px',
+                  overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                }} title={item['学院名称']}>
+                  {item['学院名称'].replace('学院', '').replace('（', '(')}
+                </span>
+                <span style={{
+                  textAlign: 'center',
+                  padding: '3px 8px',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: lColor,
+                  background: lColor + '18',
+                  whiteSpace: 'nowrap',
+                }}>
+                  {item['奖学金等级'].replace('奖学金', '')}
+                </span>
+              </div>
+            )
+          })
+        )}
+      </div>
+
+      {/* 分页 */}
+      {totalPages > 1 && (
+        <div style={{
+          display: 'flex', justifyContent: 'center', alignItems: 'center',
+          gap: '6px', marginTop: '16px',
+        }}>
+          <button
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            style={{
+              padding: '6px 12px', borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--card-border)',
+              background: page === 1 ? 'var(--bg-secondary)' : 'var(--card-bg)',
+              color: page === 1 ? 'var(--text-muted)' : 'var(--text-primary)',
+              fontSize: '13px', cursor: page === 1 ? 'not-allowed' : 'pointer',
+            }}
+          >
+            上一页
+          </button>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)', padding: '0 8px' }}>
+            {page} / {totalPages}
+          </span>
+          <button
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            style={{
+              padding: '6px 12px', borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--card-border)',
+              background: page === totalPages ? 'var(--bg-secondary)' : 'var(--card-bg)',
+              color: page === totalPages ? 'var(--text-muted)' : 'var(--text-primary)',
+              fontSize: '13px', cursor: page === totalPages ? 'not-allowed' : 'pointer',
+            }}
+          >
+            下一页
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ========================================
+   奖学金页面（Tab 容器）
+   ======================================== */
+function ScholarshipPage() {
+  const [activeTab, setActiveTab] = useState('list')
+
+  const tabs = [
+    { key: 'list', label: '奖学金名单', icon: Award },
+    { key: 'calc', label: '综合测评计算', icon: Trophy },
+  ]
+
+  return (
+    <div style={{ padding: '0 0 40px' }}>
+      {/* Tab 切换 */}
+      <div style={{
+        display: 'flex',
+        gap: '4px',
+        padding: '4px',
+        background: 'var(--bg-secondary)',
+        borderRadius: 'var(--radius-lg)',
+        marginBottom: '24px',
+        maxWidth: '900px',
+        margin: '0 auto 24px',
+      }}>
+        {tabs.map(tab => {
+          const Icon = tab.icon
+          const isActive = activeTab === tab.key
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              style={{
+                flex: 1,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                padding: '12px 16px',
+                borderRadius: 'var(--radius-md)',
+                border: 'none',
+                background: isActive ? 'var(--card-bg)' : 'transparent',
+                color: isActive ? 'var(--primary)' : 'var(--text-muted)',
+                fontSize: '14px',
+                fontWeight: isActive ? 600 : 500,
+                cursor: 'pointer',
+                transition: 'all 0.2s',
+                boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+              }}
+            >
+              <Icon size={16} />
+              {tab.label}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Tab 内容 */}
+      {activeTab === 'list' ? <ScholarshipList /> : <ScholarshipCalculator />}
     </div>
   )
 }

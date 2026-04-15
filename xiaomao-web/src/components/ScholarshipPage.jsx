@@ -1451,6 +1451,7 @@ function ScholarshipCalculator({ onShowList }) {
    奖学金名单查看组件
    ======================================== */
 function ScholarshipList({ onBack }) {
+  const [allData, setAllData] = useState([])
   const [list, setList] = useState([])
   const [filters, setFilters] = useState({ colleges: [], grades: [], levels: [], total: 0 })
   const [loading, setLoading] = useState(true)
@@ -1460,50 +1461,62 @@ function ScholarshipList({ onBack }) {
   const [searchInput, setSearchInput] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const searchTimer = useRef(null)
+  const [page, setPage] = useState(1)
   const [total, setTotal] = useState(0)
+  const pageSize = 50
 
+  // 加载全量数据 + 提取筛选选项
   useEffect(() => {
-    fetch(`${API_BASE}/scholarship/filters`)
+    fetch('/scholarship-2025-2026-1.json')
       .then(r => r.json())
-      .then(d => { if (d.success) setFilters(d.data) })
-      .catch(() => {})
-  }, [])
-
-  /* 防抖搜索：输入 300ms 后才触发请求 */
-  const handleSearchChange = (val) => {
-    setSearchInput(val)
-    clearTimeout(searchTimer.current)
-    searchTimer.current = setTimeout(() => {
-      setSearchQuery(val)
-    }, 300)
-  }
-
-  useEffect(() => {
-    setLoading(true)
-    const params = new URLSearchParams()
-    if (college) params.set('college', college)
-    if (grade) params.set('grade', grade)
-    if (level) params.set('level', level)
-    if (searchQuery) params.set('search', searchQuery)
-    params.set('pageSize', 9999)
-
-    fetch(`${API_BASE}/scholarship/list?${params}`)
-      .then(r => r.json())
-      .then(d => {
-        if (d.success) {
-          setList(d.data.list)
-          setTotal(d.data.total)
-        }
+      .then(data => {
+        const arr = Array.isArray(data) ? data : []
+        setAllData(arr)
+        setFilters({
+          colleges: [...new Set(arr.map(s => s['学院名称']))].sort(),
+          grades: [...new Set(arr.map(s => s['年级']))].sort(),
+          levels: [...new Set(arr.map(s => s['奖学金等级']))].sort(),
+          total: arr.length,
+        })
       })
       .catch(() => {})
       .finally(() => setLoading(false))
-  }, [college, grade, level, searchQuery])
+  }, [])
+
+  // 前端本地过滤 + 分页
+  useEffect(() => {
+    let filtered = [...allData]
+    if (college) filtered = filtered.filter(s => s['学院名称'] === college)
+    if (grade) filtered = filtered.filter(s => s['年级'] === grade)
+    if (level) filtered = filtered.filter(s => s['奖学金等级'] === level)
+    if (searchQuery) {
+      const q = searchQuery.trim().toLowerCase()
+      filtered = filtered.filter(s =>
+        s['姓名'].toLowerCase().includes(q) || s['学号'].includes(q)
+      )
+    }
+    const total = filtered.length
+    const start = (page - 1) * pageSize
+    setList(filtered.slice(start, start + pageSize))
+    setTotal(total)
+  }, [allData, college, grade, level, searchQuery, page])
+
+  // 切换筛选条件时回到第一页
+  useEffect(() => { setPage(1) }, [college, grade, level, searchQuery])
+
+  /* 防抖搜索 */
+  const handleSearchChange = (val) => {
+    setSearchInput(val)
+    clearTimeout(searchTimer.current)
+    searchTimer.current = setTimeout(() => setSearchQuery(val), 300)
+  }
 
   const resetFilters = () => {
     setCollege(''); setGrade(''); setLevel(''); setSearchInput(''); setSearchQuery('')
   }
 
   const hasFilter = college || grade || level || searchQuery
+  const totalPages = Math.ceil(total / pageSize)
 
   const levelColors = {
     '特等奖学金': '#FF6B6B',
@@ -1686,6 +1699,23 @@ function ScholarshipList({ onBack }) {
               </div>
             )
           })}
+        </div>
+      )}
+
+      {/* 分页 */}
+      {!loading && totalPages > 1 && (
+        <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px', marginTop: '16px' }}>
+          <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+            style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: page <= 1 ? 'var(--text-muted)' : 'var(--text-primary)', cursor: page <= 1 ? 'not-allowed' : 'pointer', fontSize: '13px' }}>
+            上一页
+          </button>
+          <span style={{ fontSize: '13px', color: 'var(--text-secondary)' }}>
+            {page} / {totalPages}
+          </span>
+          <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}
+            style={{ padding: '6px 14px', borderRadius: '8px', border: '1px solid var(--card-border)', background: 'var(--card-bg)', color: page >= totalPages ? 'var(--text-muted)' : 'var(--text-primary)', cursor: page >= totalPages ? 'not-allowed' : 'pointer', fontSize: '13px' }}>
+            下一页
+          </button>
         </div>
       )}
     </div>

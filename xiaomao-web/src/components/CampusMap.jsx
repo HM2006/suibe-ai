@@ -58,13 +58,13 @@ function CampusMap() {
   }
 
   return (
-    <div className="map-container" style={{ display: 'flex', flexDirection: 'column', backgroundColor: '#F8FAFC' }}>
+    <div className="map-container" style={{ display: 'flex', flexDirection: 'column' }}>
 
       {/* 头部信息 */}
-      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 20px', backgroundColor: '#fff', borderBottom: '1px solid #E2E8F0' }}>
+      <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
-        <h1 className="page-title" style={{ margin: 0, fontSize: '20px', color: '#0F172A' }}>校园导航</h1>
-        <p className="page-desc" style={{ margin: '4px 0 0 0', fontSize: '13px', color: '#64748B' }}>
+        <h1 className="page-title">校园导航</h1>
+        <p className="page-desc">
           查看各校园地点和路线
         </p>
         </div>
@@ -81,15 +81,16 @@ function CampusMap() {
             onChange={(e) => setSearchText(e.target.value)}
             style={{
               width: '100%', padding: '10px 12px 10px 38px',
-              borderRadius: '8px', border: '1px solid #E2E8F0',
-              outline: 'none', fontSize: '14px', backgroundColor: '#F1F5F9'
+              borderRadius: 'var(--radius-full)', border: 'none',
+              outline: 'none', fontSize: '14px', backgroundColor: 'var(--surface-container-highest)',
+              color: 'var(--on-surface)', boxShadow: 'var(--shadow-sm)',
             }}
           />
         </div>
       </div>
 
       {/* SVG 专业平面地图区 */}
-      <div className="map-canvas" style={{ flex: 1, minHeight: '300px', overflow: 'hidden', position: 'relative', backgroundColor: '#F1F5F9' }}>
+      <div className="map-canvas" style={{ flex: 1, minHeight: '300px', overflow: 'hidden', position: 'relative' }}>
         <svg
           viewBox="0 0 800 600"
           preserveAspectRatio="xMidYMid meet"
@@ -213,8 +214,8 @@ function CampusMap() {
 
       {/* POI列表 */}
       <div className="poi-list" style={{
-        maxHeight: '240px', overflowY: 'auto', backgroundColor: '#fff',
-        borderTop: '1px solid #E2E8F0', padding: '8px 12px',
+        maxHeight: '240px', overflowY: 'auto',
+        padding: '8px 12px',
       }}>
         {filteredPois.map((poi) => (
           <div
@@ -224,7 +225,7 @@ function CampusMap() {
             style={{
               display: 'flex', alignItems: 'center', gap: '10px',
               padding: '10px 8px', borderRadius: '10px', cursor: 'pointer',
-              backgroundColor: selectedPoi?.id === poi.id ? '#F1F5F9' : 'transparent',
+              backgroundColor: selectedPoi?.id === poi.id ? 'var(--primary-container)' : 'transparent',
               transition: 'background 0.15s',
             }}
           >
@@ -239,12 +240,12 @@ function CampusMap() {
               <poi.icon size={18} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '14px', fontWeight: 600, color: '#0F172A' }}>{poi.name}</div>
-              <div style={{ fontSize: '12px', color: '#64748B' }}>
+              <div style={{ fontSize: '14px', fontWeight: 600, color: 'var(--on-surface)' }}>{poi.name}</div>
+              <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
                 {poi.category} · {poi.address}
               </div>
             </div>
-            <MapPin size={14} style={{ color: '#94A3B8', flexShrink: 0 }} />
+            <MapPin size={14} style={{ color: 'var(--text-muted)', flexShrink: 0 }} />
           </div>
         ))}
       </div>

@@ -905,19 +905,21 @@ select {
 .page-header {
   padding: 32px;
   padding-bottom: 0;
+  margin-bottom: 24px;
 }
 
 .page-title {
   font-size: var(--headline-lg);
   font-weight: 700;
   color: var(--on-surface);
-  margin-bottom: 6px;
+  margin-bottom: 10px;
   letter-spacing: var(--ls-tight);
 }
 
 .page-desc {
   font-size: var(--body-md);
   color: var(--text-secondary);
+  margin-bottom: 4px;
 }
 
 /* ========================================

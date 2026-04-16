@@ -1492,7 +1492,7 @@ function ScholarshipList({ onBack }) {
     if (searchQuery) {
       const q = searchQuery.trim().toLowerCase()
       filtered = filtered.filter(s =>
-        String(s['姓名'] || '').toLowerCase().includes(q) || String(s['学号'] || '').includes(q)
+        s['姓名'].toLowerCase().includes(q) || s['学号'].includes(q)
       )
     }
     const total = filtered.length

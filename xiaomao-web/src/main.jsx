@@ -25,7 +25,7 @@ if (isNative) {
   try {
     const { StatusBar, Style } = await import('@capacitor/status-bar')
     await StatusBar.setStyle({ style: Style.Light })
-    await StatusBar.setBackgroundColor({ color: '#4F46E5' })
+    await StatusBar.setBackgroundColor({ color: '#3525cd' })
   } catch {
     /* 状态栏设置失败不影响运行 */
   }

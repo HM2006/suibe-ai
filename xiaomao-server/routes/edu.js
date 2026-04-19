@@ -186,10 +186,24 @@ router.get('/edu/mooc', asyncHandler(async (req, res) => {
   }
 
   const db = require('../services/database');
-  const cache = db.getScheduleCache(parseInt(userId));
 
-  if (cache && cache.data && cache.data.moocCourses) {
+  /* 优先从缓存读取 */
+  const cache = db.getScheduleCache(parseInt(userId));
+  if (cache && cache.data && cache.data.moocCourses && cache.data.moocCourses.length > 0) {
     return res.json({ success: true, data: cache.data.moocCourses, fromCache: true });
+  }
+
+  /* 缓存无数据时，尝试实时获取（需要教务系统已登录） */
+  const eduProxy = getEduProxy();
+  if (eduProxy.loggedIn) {
+    try {
+      const moocCourses = await eduProxy._fetchMoocCourses();
+      if (moocCourses && moocCourses.length > 0) {
+        return res.json({ success: true, data: moocCourses, fromCache: false });
+      }
+    } catch (err) {
+      console.warn('[EduRoute] 实时获取MOOC失败:', err.message);
+    }
   }
 
   res.json({ success: true, data: [], fromCache: false });

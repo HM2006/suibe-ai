@@ -565,6 +565,11 @@ class EduProxy {
 
   /**
    * 登录后获取 studentId 和当前 semesterId
+   *
+   * 策略（合并两版优点）：
+   * 步骤1：从成绩页面重定向 URL 获取 studentId
+   * 步骤2：从课表页面 HTML 提取 semesterId（新版逻辑，更可靠）
+   * 步骤3：从成绩 API 获取 semesterId 并验证课表可用性（旧版逻辑，兜底）
    */
   async _fetchStudentInfo() {
     try {
@@ -648,12 +653,9 @@ class EduProxy {
           if (semDeclIdx !== -1) {
             const semDeclEnd = ctHtml.indexOf(';', semDeclIdx);
             const semDeclBlock = ctHtml.substring(semDeclIdx, semDeclEnd > 0 ? Math.min(semDeclEnd, semDeclIdx + 5000) : semDeclIdx + 5000);
-            /* 匹配 'id':数字 但排除嵌套在子对象中的 id（通过检查前面没有 { 跟随）
-             * 实际上更可靠的方式：找 'id':81 这种出现在顶层属性位置的模式 */
             const idMatches = [...semDeclBlock.matchAll(/'id'\s*:\s*(\d+)/g)];
             for (const m of idMatches) {
               const val = parseInt(m[1]);
-              /* currentSemester 的 id 通常是较大的数字（学期 ID），排除明显是关联 ID 的小数字 */
               if (val > 10) {
                 this.semesterId = val;
                 console.log('[EduProxy] 步骤2 从 currentSemester 块中获取 id:', this.semesterId);
@@ -682,10 +684,11 @@ class EduProxy {
         console.warn('[EduProxy] 步骤2 失败:', e.message);
       }
 
-      /* 步骤3：如果还没有 semesterId，从成绩 API 获取 */
-      if (!this.semesterId && this.studentId) {
+      /* 步骤3：通过成绩 API 获取所有 semesterId，并尝试验证课表可用性（旧版兜底逻辑）
+       * 成绩 API 不需要 semesterId 参数，返回数据中包含各学期的 ID */
+      if (this.studentId) {
         try {
-          console.log('[EduProxy] 步骤3: 从成绩 API 获取 semesterId ...');
+          console.log('[EduProxy] 步骤3: 通过成绩 API 获取所有 semesterId ...');
           const res = await this.axiosInstance.get(
             `/student/for-std/grade/sheet/info/${this.studentId}`,
             { timeout: 15000 }
@@ -694,9 +697,54 @@ class EduProxy {
           if (data) {
             const semesters = data.semesterId2studentGrades || data.semesters || {};
             const semIds = Object.keys(semesters).map(s => parseInt(s));
+            console.log('[EduProxy] 步骤3 发现的所有 semesterId:', semIds);
+
             if (semIds.length > 0) {
-              this.semesterId = semIds[semIds.length - 1];
-              console.log('[EduProxy] 步骤3 从成绩获取 semesterId:', this.semesterId);
+              /* 如果步骤2没有获取到 semesterId，使用成绩中最新的学期 */
+              if (!this.semesterId) {
+                this.semesterId = semIds[semIds.length - 1];
+                console.log('[EduProxy] 步骤3 使用成绩最新 semesterId:', this.semesterId);
+              }
+
+              /* 验证当前 semesterId 是否能获取到课表数据 */
+              if (this.semesterId) {
+                try {
+                  console.log('[EduProxy] 步骤3 验证 semesterId:', this.semesterId, '课表可用性...');
+                  const courseRes = await this.axiosInstance.get(
+                    `/student/for-std/course-table/semester/${this.semesterId}/print-data`,
+                    { params: { semesterId: this.semesterId, hasExperiment: true }, timeout: 10000 }
+                  );
+                  if (courseRes.data && typeof courseRes.data === 'object') {
+                    const hasData = (courseRes.data.studentTableVms && courseRes.data.studentTableVms.length > 0) ||
+                                    (courseRes.data.courseUnits && courseRes.data.courseUnits.length > 0);
+                    if (hasData) {
+                      console.log('[EduProxy] 步骤3 课表验证成功，semesterId:', this.semesterId);
+                    } else {
+                      /* 当前 semesterId 无课表数据，尝试其他学期 */
+                      console.log('[EduProxy] 步骤3 当前学期无课表，尝试其他学期...');
+                      for (const semId of semIds.reverse()) {
+                        try {
+                          const altRes = await this.axiosInstance.get(
+                            `/student/for-std/course-table/semester/${semId}/print-data`,
+                            { params: { semesterId: semId, hasExperiment: true }, timeout: 10000 }
+                          );
+                          const altHasData = (altRes.data?.studentTableVms?.length > 0) ||
+                                             (altRes.data?.courseUnits?.length > 0);
+                          if (altHasData) {
+                            this.semesterId = semId;
+                            console.log('[EduProxy] 步骤3 找到可用课表 semesterId:', this.semesterId);
+                            break;
+                          }
+                        } catch (courseErr) {
+                          console.log('[EduProxy] 步骤3 semesterId', semId, '课表获取失败，继续尝试下一个');
+                        }
+                      }
+                    }
+                  }
+                } catch (courseErr) {
+                  console.warn('[EduProxy] 步骤3 课表验证失败:', courseErr.message);
+                }
+              }
             }
           }
         } catch (e) {
@@ -989,14 +1037,16 @@ class EduProxy {
             location = campusName;
           }
 
-          /* 教师信息 */
-          const teachers = unit.teachers || [];
+          /* 教师信息 - 多字段兼容 */
+          const teachers = unit.teachers || unit.teacherList || [];
           if (Array.isArray(teachers) && teachers.length > 0) {
-            teacherName = teachers.map(t => t.name || '').filter(Boolean).join(', ');
+            teacherName = teachers.map(t => t.name || t.nameZh || t.teacherName || '').filter(Boolean).join(', ');
           } else if (typeof teachers === 'string') {
             teacherName = teachers;
           } else {
-            teacherName = unit.teacherName || '';
+            /* 尝试其他可能的教师字段 */
+            teacherName = unit.teacherName || unit.teacherAssignmentString ||
+                          (unit.teacher && (unit.teacher.nameZh || unit.teacher.name)) || '';
           }
 
           stdCount = unit.stdCount || 0;
@@ -1039,7 +1089,8 @@ class EduProxy {
           const roomName = room.nameZh || room.name || '';
           location = buildingName && roomName ? `${buildingName} ${roomName}` : roomName;
 
-          teacherName = teacher.nameZh || teacher.teacherAssignmentString || '';
+          teacherName = teacher.nameZh || teacher.name || teacher.teacherAssignmentString ||
+                        (Array.isArray(teacher) ? teacher.map(t => t.nameZh || t.name || '').filter(Boolean).join(', ') : '');
 
           stdCount = unit.stdCount || 0;
           limitCount = unit.limitCount || 0;
@@ -1085,38 +1136,62 @@ class EduProxy {
   /**
    * 获取 MOOC 课程信息
    * 使用 print-data API（与学生课表相同的数据源），从中筛选 MOOC 课程
+   * 同时兼容 get-all-data API 作为备用
    */
   async _fetchMoocCourses() {
     try {
       if (!this.semesterId) return [];
 
-      const res = await this.axiosInstance.get(
-        `/student/for-std/course-table/semester/${this.semesterId}/print-data`,
-        {
-          params: {
-            semesterId: this.semesterId,
-            hasExperiment: true,
-          },
-          timeout: 10000,
-        }
-      );
-
-      const data = res.data;
-      if (!data) return [];
-
-      /* 从 studentTableVms 中提取所有 activities */
       let allUnits = [];
-      if (data.studentTableVms && Array.isArray(data.studentTableVms)) {
-        for (const tableVm of data.studentTableVms) {
-          if (tableVm.activities && Array.isArray(tableVm.activities)) {
-            allUnits = allUnits.concat(tableVm.activities);
+
+      /* 方法1：使用 print-data API（主要数据源） */
+      try {
+        const res = await this.axiosInstance.get(
+          `/student/for-std/course-table/semester/${this.semesterId}/print-data`,
+          {
+            params: {
+              semesterId: this.semesterId,
+              hasExperiment: true,
+            },
+            timeout: 10000,
+          }
+        );
+
+        const data = res.data;
+        if (data) {
+          /* 从 studentTableVms 中提取所有 activities */
+          if (data.studentTableVms && Array.isArray(data.studentTableVms)) {
+            for (const tableVm of data.studentTableVms) {
+              if (tableVm.activities && Array.isArray(tableVm.activities)) {
+                allUnits = allUnits.concat(tableVm.activities);
+              }
+            }
+          }
+          /* 兼容旧结构 */
+          if (allUnits.length === 0) {
+            allUnits = data.courseUnits || data.studentCourseUnits || [];
           }
         }
+      } catch (err) {
+        console.warn('[EduProxy] print-data MOOC 获取失败，尝试备用 API:', err.message);
       }
-      /* 兼容旧结构 */
+
+      /* 方法2：使用 get-all-data API 作为备用（旧版逻辑） */
       if (allUnits.length === 0) {
-        allUnits = data.courseUnits || data.studentCourseUnits || [];
+        try {
+          const res = await this.axiosInstance.get('/student/for-std/course-table/get-all-data', {
+            params: { semesterId: this.semesterId },
+            timeout: 10000,
+          });
+          const data = res.data;
+          if (data) {
+            allUnits = data.courseUnits || data.studentCourseUnits || [];
+          }
+        } catch (err) {
+          console.warn('[EduProxy] get-all-data MOOC 获取也失败:', err.message);
+        }
       }
+
       const moocCourses = [];
       const seen = new Set();
 
@@ -1133,26 +1208,38 @@ class EduProxy {
             ? (unit.remark || '')
             : (unit.remark || unit.lesson?.remark || '');
 
+          /* MOOC 检测：多种匹配条件 */
           const isMooc = nameZh.includes('MOOC') ||
+                         nameZh.includes('mooc') ||
+                         nameZh.includes('Mooc') ||
                          kindName.includes('MOOC') ||
                          kindName.includes('mooc') ||
-                         (virtualRoom && virtualRoom.nameZh);
+                         kindName.includes('Mooc') ||
+                         (virtualRoom && (virtualRoom.nameZh || virtualRoom.name)) ||
+                         remark.includes('MOOC') ||
+                         remark.includes('mooc') ||
+                         (isFlat && unit.virtualCampus) ||
+                         (isFlat && (unit.courseTypeName || '').includes('MOOC'));
 
           if (!isMooc) continue;
           if (seen.has(nameZh)) continue;
           seen.add(nameZh);
 
-          let courseName = nameZh.replace(/^（选）/, '').replace(/（MOOC）$/i, '').trim();
+          let courseName = nameZh.replace(/^（选）/, '').replace(/（MOOC）$/i, '').replace(/（Mooc）$/i, '').trim();
           if (!courseName) continue;
 
           let platform = { name: '其他平台', url: '' };
-          const fullText = nameZh + ' ' + remark;
+          const fullText = nameZh + ' ' + remark + ' ' + (isFlat ? (unit.courseTypeName || '') : '');
           if (fullText.includes('学堂在线') || fullText.includes('雨课堂')) {
             platform = { name: '雨课堂', url: 'https://suibe.yuketang.cn/' };
-          } else if (fullText.includes('超星尔雅') || fullText.includes('超星')) {
+          } else if (fullText.includes('超星尔雅') || fullText.includes('超星') || fullText.includes('学习通')) {
             platform = { name: '学习通（超星尔雅）', url: 'https://i.chaoxing.com' };
-          } else if (fullText.includes('智慧树')) {
+          } else if (fullText.includes('智慧树') || fullText.includes('知到')) {
             platform = { name: '智慧树', url: 'https://www.zhihuishu.com/' };
+          } else if (fullText.includes('中国大学MOOC') || fullText.includes('icourse')) {
+            platform = { name: '中国大学MOOC', url: 'https://www.icourse163.org/' };
+          } else if (fullText.includes('UOOC') || fullText.includes('优课')) {
+            platform = { name: 'UOOC联盟', url: 'https://www.uooc.net.cn/' };
           }
 
           let remarkUrl = '';

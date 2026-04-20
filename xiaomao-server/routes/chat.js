@@ -106,7 +106,7 @@ router.get('/chat/stream', asyncHandler(async (req, res) => {
 
     // 解析SSE流并转发给客户端
     parseSSEStream(
-      response.data,
+      response,
       // onMessage: 收到消息片段
       (text) => {
         const eventData = JSON.stringify({ answer: text });
@@ -182,7 +182,7 @@ router.post('/chat/stream', asyncHandler(async (req, res) => {
     const response = await sendMessageStream(query, conversation_id, userId);
 
     parseSSEStream(
-      response.data,
+      response,
       (text) => {
         const eventData = JSON.stringify({ answer: text });
         res.write(`event: message\ndata: ${eventData}\n\n`);

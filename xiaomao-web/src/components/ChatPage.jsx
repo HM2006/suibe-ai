@@ -210,7 +210,7 @@ function ChatPage() {
       ])
 
       /* 调用后端API */
-      const response = await fetch(`${API.chat}`, {
+      const response = await fetch(`${API.chat}/stream`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

@@ -616,19 +616,27 @@ class EduProxy {
           console.log('[EduProxy] 步骤2 成功获取 personId:', this.personId);
         }
 
-        /* 提取 dataId（课表数据 ID） */
+        /* 提取 dataId（课表数据 ID，通常等于 personId） */
         const dataIdMatch = ctHtml.match(/var\s+dataId\s*=\s*(\d+)/);
         if (dataIdMatch) {
           this.dataId = parseInt(dataIdMatch[1]);
           console.log('[EduProxy] 步骤2 成功获取 dataId:', this.dataId);
+        } else if (this.personId) {
+          /* dataId 通常等于 personId，兜底使用 */
+          this.dataId = this.personId;
+          console.log('[EduProxy] 步骤2 dataId 未找到，使用 personId 作为 dataId:', this.dataId);
         }
 
         /* 提取 bizTypeId（业务类型 ID，学生端通常为 2） */
-        const bizTypeIdMatch = ctHtml.match(/var\s+bizTypeId\s*=\s*(\d+)/);
-        if (bizTypeIdMatch) {
-          this.bizTypeId = parseInt(bizTypeIdMatch[1]);
-          console.log('[EduProxy] 步骤2 成功获取 bizTypeId:', this.bizTypeId);
-        }
+          const bizTypeIdMatch = ctHtml.match(/var\s+bizTypeId\s*=\s*(\d+)/);
+          if (bizTypeIdMatch) {
+            this.bizTypeId = parseInt(bizTypeIdMatch[1]);
+            console.log('[EduProxy] 步骤2 成功获取 bizTypeId:', this.bizTypeId);
+          } else {
+            /* 学生端 bizTypeId 固定为 2 */
+            this.bizTypeId = 2;
+            console.log('[EduProxy] 步骤2 bizTypeId 未找到，默认使用 2（学生端）');
+          }
 
         /* 提取 currentSemester.id
          * currentSemester 是一个复杂嵌套对象，直接匹配 'id' 容易命中嵌套字段（如 calendarAssoc.id=1）
@@ -895,7 +903,7 @@ class EduProxy {
       /* 获取 MOOC 课程信息 */
       let moocCourses = [];
       try {
-        moocCourses = await this._fetchMoocCourses();
+        moocCourses = await this._fetchMoocCourses(data);
       } catch (err) {
         console.warn('[EduProxy] MOOC 信息获取失败:', err.message);
       }
@@ -960,6 +968,16 @@ class EduProxy {
         if (tableVm.activities && Array.isArray(tableVm.activities)) {
           courseUnits = courseUnits.concat(tableVm.activities);
         }
+      }
+      /* 调试：打印第一条 activity 的所有字段名 */
+      if (courseUnits.length > 0) {
+        console.log(`[EduProxy] 第一条 activity 的字段:`, Object.keys(courseUnits[0]).join(', '));
+        console.log(`[EduProxy] 第一条 activity 示例(教师相关):`, JSON.stringify({
+          teachers: courseUnits[0].teachers,
+          teacherName: courseUnits[0].teacherName,
+          teacher: courseUnits[0].teacher,
+          teacherAssignmentString: courseUnits[0].teacherAssignmentString,
+        }));
       }
     }
 
@@ -1037,10 +1055,19 @@ class EduProxy {
             location = campusName;
           }
 
-          /* 教师信息 - 多字段兼容 */
+          /* 教师信息 - 多字段兼容
+           * 实际数据: teachers 是字符串数组，如 ["单泓睿(20230005,讲师（高校）)"]
+           * 需要提取姓名部分（括号前的内容） */
           const teachers = unit.teachers || unit.teacherList || [];
           if (Array.isArray(teachers) && teachers.length > 0) {
-            teacherName = teachers.map(t => t.name || t.nameZh || t.teacherName || '').filter(Boolean).join(', ');
+            teacherName = teachers.map(t => {
+              if (typeof t === 'string') {
+                /* 字符串格式: "姓名(工号,职称)" → 提取姓名 */
+                const parenIdx = t.indexOf('(');
+                return parenIdx > 0 ? t.substring(0, parenIdx) : t;
+              }
+              return t.name || t.nameZh || t.teacherName || '';
+            }).filter(Boolean).join(', ');
           } else if (typeof teachers === 'string') {
             teacherName = teachers;
           } else {
@@ -1116,6 +1143,7 @@ class EduProxy {
           endSlot,
           day: dayIndex,
           weeks: weeksStr || '',
+          weekIndexes: weeksArr || [],  // 原始周次数组，前端用于按周过滤
           type,
           enrollment,
           color: 0,
@@ -1135,134 +1163,161 @@ class EduProxy {
 
   /**
    * 获取 MOOC 课程信息
-   * 使用 print-data API（与学生课表相同的数据源），从中筛选 MOOC 课程
-   * 同时兼容 get-all-data API 作为备用
+   *
+   * 策略：
+   * 1. 先从 getSchedule 已获取的 print-data 数据中筛选
+   * 2. 如果没找到 MOOC，再单独请求 get-data API（MOOC 只在此 API 中）
    */
-  async _fetchMoocCourses() {
+  async _fetchMoocCourses(existingData) {
     try {
       if (!this.semesterId) return [];
 
+      /* ===== 第一轮：从已有 print-data 数据中筛选 ===== */
       let allUnits = [];
-
-      /* 方法1：使用 print-data API（主要数据源） */
-      try {
-        const res = await this.axiosInstance.get(
-          `/student/for-std/course-table/semester/${this.semesterId}/print-data`,
-          {
-            params: {
-              semesterId: this.semesterId,
-              hasExperiment: true,
-            },
-            timeout: 10000,
+      if (existingData) {
+        if (existingData.studentTableVms) {
+          for (const tableVm of existingData.studentTableVms) {
+            if (tableVm.activities) allUnits = allUnits.concat(tableVm.activities);
           }
-        );
+        }
+        if (allUnits.length === 0) allUnits = existingData.courseUnits || [];
+      }
 
-        const data = res.data;
-        if (data) {
-          /* 从 studentTableVms 中提取所有 activities */
-          if (data.studentTableVms && Array.isArray(data.studentTableVms)) {
-            for (const tableVm of data.studentTableVms) {
-              if (tableVm.activities && Array.isArray(tableVm.activities)) {
-                allUnits = allUnits.concat(tableVm.activities);
+      let moocCourses = this._filterMoocFromUnits(allUnits);
+      if (moocCourses.length > 0) {
+        console.log(`[EduProxy] MOOC: 从已有数据中找到 ${moocCourses.length} 门`);
+        return moocCourses;
+      }
+      console.log(`[EduProxy] MOOC: 已有数据(${allUnits.length}条)中未找到MOOC，尝试 get-data API...`);
+
+      /* ===== 第二轮：请求 get-data API（MOOC 只在此 API 中） ===== */
+      if (this.dataId) {
+        try {
+          const params = { semesterId: this.semesterId, dataId: this.dataId };
+          if (this.bizTypeId) params.bizTypeId = this.bizTypeId;
+          console.log(`[EduProxy] MOOC: 请求 get-data, params:`, JSON.stringify(params));
+
+          const res = await this.axiosInstance.get('/student/for-std/course-table/get-data', {
+            params, timeout: 10000,
+          });
+          if (res.data) {
+              /* get-data 响应结构: { lessons: [...], lessonIds: [...], ... }
+               * 注意：没有 courseUnits 字段，课程在 lessons 数组中 */
+              const getDataUnits = res.data.lessons || res.data.courseUnits || res.data.studentCourseUnits || [];
+              console.log(`[EduProxy] MOOC: get-data 返回 ${getDataUnits.length} 条 lessons`);
+              if (getDataUnits.length > 0) {
+                /* 调试：打印第一条 lesson 的所有字段 */
+                console.log(`[EduProxy]   第一条 lesson keys:`, Object.keys(getDataUnits[0]));
+                console.log(`[EduProxy]   第一条 lesson 示例:`, JSON.stringify(getDataUnits[0]).substring(0, 800));
+                /* 打印所有课程名称 */
+                for (const unit of getDataUnits) {
+                  const nameZh = unit.nameZh || unit.courseName || unit.lessonName || '';
+                  const kindName = unit.lessonKind?.nameZh || unit.courseType?.nameZh || '';
+                  console.log(`[EduProxy]   get-data课程: "${nameZh}" | 类型: "${kindName}"`);
+                }
+              moocCourses = this._filterMoocFromUnits(getDataUnits);
+              if (moocCourses.length > 0) {
+                console.log(`[EduProxy] MOOC: 从 get-data 中找到 ${moocCourses.length} 门`);
+                return moocCourses;
               }
             }
           }
-          /* 兼容旧结构 */
-          if (allUnits.length === 0) {
-            allUnits = data.courseUnits || data.studentCourseUnits || [];
-          }
-        }
-      } catch (err) {
-        console.warn('[EduProxy] print-data MOOC 获取失败，尝试备用 API:', err.message);
-      }
-
-      /* 方法2：使用 get-all-data API 作为备用（旧版逻辑） */
-      if (allUnits.length === 0) {
-        try {
-          const res = await this.axiosInstance.get('/student/for-std/course-table/get-all-data', {
-            params: { semesterId: this.semesterId },
-            timeout: 10000,
-          });
-          const data = res.data;
-          if (data) {
-            allUnits = data.courseUnits || data.studentCourseUnits || [];
-          }
         } catch (err) {
-          console.warn('[EduProxy] get-all-data MOOC 获取也失败:', err.message);
-        }
-      }
-
-      const moocCourses = [];
-      const seen = new Set();
-
-      for (const unit of allUnits) {
-        try {
-          /* 适配两种数据结构 */
-          const isFlat = !!unit.lessonName;  // 扁平结构有 lessonName 字段
-          const nameZh = isFlat ? (unit.courseName || unit.lessonName || '') : (unit.lesson?.nameZh || '');
-          const kindName = isFlat
-            ? (unit.courseType?.nameZh || '')
-            : (unit.lesson?.lessonKind?.nameZh || '');
-          const virtualRoom = unit.virtualRoom || {};
-          const remark = isFlat
-            ? (unit.remark || '')
-            : (unit.remark || unit.lesson?.remark || '');
-
-          /* MOOC 检测：多种匹配条件 */
-          const isMooc = nameZh.includes('MOOC') ||
-                         nameZh.includes('mooc') ||
-                         nameZh.includes('Mooc') ||
-                         kindName.includes('MOOC') ||
-                         kindName.includes('mooc') ||
-                         kindName.includes('Mooc') ||
-                         (virtualRoom && (virtualRoom.nameZh || virtualRoom.name)) ||
-                         remark.includes('MOOC') ||
-                         remark.includes('mooc') ||
-                         (isFlat && unit.virtualCampus) ||
-                         (isFlat && (unit.courseTypeName || '').includes('MOOC'));
-
-          if (!isMooc) continue;
-          if (seen.has(nameZh)) continue;
-          seen.add(nameZh);
-
-          let courseName = nameZh.replace(/^（选）/, '').replace(/（MOOC）$/i, '').replace(/（Mooc）$/i, '').trim();
-          if (!courseName) continue;
-
-          let platform = { name: '其他平台', url: '' };
-          const fullText = nameZh + ' ' + remark + ' ' + (isFlat ? (unit.courseTypeName || '') : '');
-          if (fullText.includes('学堂在线') || fullText.includes('雨课堂')) {
-            platform = { name: '雨课堂', url: 'https://suibe.yuketang.cn/' };
-          } else if (fullText.includes('超星尔雅') || fullText.includes('超星') || fullText.includes('学习通')) {
-            platform = { name: '学习通（超星尔雅）', url: 'https://i.chaoxing.com' };
-          } else if (fullText.includes('智慧树') || fullText.includes('知到')) {
-            platform = { name: '智慧树', url: 'https://www.zhihuishu.com/' };
-          } else if (fullText.includes('中国大学MOOC') || fullText.includes('icourse')) {
-            platform = { name: '中国大学MOOC', url: 'https://www.icourse163.org/' };
-          } else if (fullText.includes('UOOC') || fullText.includes('优课')) {
-            platform = { name: 'UOOC联盟', url: 'https://www.uooc.net.cn/' };
+          console.warn('[EduProxy] MOOC: get-data 失败:', err.message);
+          if (err.response) {
+            console.warn('[EduProxy] MOOC: get-data 响应状态:', err.response.status, '数据:', JSON.stringify(err.response.data)?.substring(0, 500));
           }
-
-          let remarkUrl = '';
-          const urlMatch = fullText.match(/(https?:\/\/[^\s"'<>)]+)/);
-          if (urlMatch) remarkUrl = urlMatch[1];
-
-          moocCourses.push({
-            name: courseName,
-            platform: platform.name,
-            platformUrl: platform.url,
-            remarkUrl,
-          });
-        } catch (err) {
-          console.warn('[EduProxy] 解析 MOOC 课程失败:', err.message);
         }
       }
 
-      console.log(`[EduProxy] MOOC课程提取完成，发现 ${moocCourses.length} 门`);
-      return moocCourses;
+      console.log(`[EduProxy] MOOC课程提取完成，发现 0 门`);
+      return [];
     } catch (err) {
-      console.warn('[EduProxy] 获取全部课程数据失败:', err.message);
+      console.warn('[EduProxy] 获取 MOOC 数据失败:', err.message);
       return [];
     }
+  }
+
+  /**
+   * 从课程单元列表中筛选 MOOC 课程
+   * 兼容 print-data 扁平结构和 get-data 嵌套结构
+   */
+  _filterMoocFromUnits(allUnits) {
+    const moocCourses = [];
+    const seen = new Set();
+
+    for (const unit of allUnits) {
+      try {
+        /* 兼容三种数据结构：
+         * 1. print-data 扁平结构: unit.courseName, unit.courseType.nameZh (有 lessonName 字段)
+         * 2. get-data lessons 结构: unit.course.nameZh, unit.lessonKind.nameZh (有 course 字段)
+         * 3. get-data courseUnits 嵌套结构: unit.lesson.nameZh, unit.lesson.lessonKind.nameZh */
+        const isFlat = !!unit.lessonName;
+        const isLesson = !isFlat && !!unit.course && !unit.lesson;
+        const nameZh = isFlat
+          ? (unit.courseName || unit.lessonName || '')
+          : isLesson
+            ? (unit.course?.nameZh || '')
+            : (unit.lesson?.nameZh || '');
+        const kindName = isFlat
+          ? (unit.courseType?.nameZh || '')
+          : isLesson
+            ? (unit.lessonKind?.nameZh || '')
+            : (unit.lesson?.lessonKind?.nameZh || '');
+        const virtualRoom = unit.virtualRoom || {};
+        const remark = isFlat
+          ? (unit.remark || unit.lessonRemark || '')
+          : (unit.remark || unit.lesson?.remark || unit.scheduleRemark || '');
+
+        const isMooc = nameZh.includes('MOOC') || nameZh.includes('mooc') || nameZh.includes('Mooc') ||
+                       kindName.includes('MOOC') || kindName.includes('mooc') || kindName.includes('Mooc') ||
+                       (virtualRoom && (virtualRoom.nameZh || virtualRoom.name)) ||
+                       remark.includes('MOOC') || remark.includes('mooc') ||
+                       (isFlat && unit.virtualCampus) ||
+                       (isFlat && (unit.courseTypeName || '').includes('MOOC'));
+
+        if (!isMooc) continue;
+        if (seen.has(nameZh)) continue;
+        seen.add(nameZh);
+
+        let courseName = nameZh.replace(/^（选）/, '').replace(/（MOOC）$/i, '').replace(/（Mooc）$/i, '').trim();
+        if (!courseName) continue;
+
+        let teacherName = '';
+        if (isLesson) {
+          /* get-data lessons 结构: teacherAssignmentString 或 teacherAssignmentStrWithoutCode */
+          teacherName = unit.teacherAssignmentStrWithoutCode || unit.teacherAssignmentString || '';
+        } else if (!isFlat) {
+          const teacher = unit.teacher || {};
+          teacherName = teacher.nameZh || teacher.name || '';
+        } else {
+          const teachers = unit.teachers || [];
+          if (Array.isArray(teachers) && teachers.length > 0) {
+            teacherName = teachers.map(t => {
+              if (typeof t === 'string') { const idx = t.indexOf('('); return idx > 0 ? t.substring(0, idx) : t; }
+              return t.name || t.nameZh || '';
+            }).filter(Boolean).join(', ');
+          }
+        }
+
+        let platform = { name: '其他平台', url: '' };
+        const fullText = nameZh + ' ' + remark + ' ' + kindName + (isFlat ? (unit.courseTypeName || '') : '');
+        if (fullText.includes('学堂在线') || fullText.includes('雨课堂')) platform = { name: '雨课堂', url: 'https://suibe.yuketang.cn/' };
+        else if (fullText.includes('超星尔雅') || fullText.includes('超星') || fullText.includes('学习通')) platform = { name: '学习通（超星尔雅）', url: 'https://i.chaoxing.com' };
+        else if (fullText.includes('智慧树') || fullText.includes('知到')) platform = { name: '智慧树', url: 'https://www.zhihuishu.com/' };
+        else if (fullText.includes('中国大学MOOC') || fullText.includes('icourse')) platform = { name: '中国大学MOOC', url: 'https://www.icourse163.org/' };
+        else if (fullText.includes('UOOC') || fullText.includes('优课')) platform = { name: 'UOOC联盟', url: 'https://www.uooc.net.cn/' };
+
+        let remarkUrl = '';
+        const urlMatch = fullText.match(/(https?:\/\/[^\s"'<>)]+)/);
+        if (urlMatch) remarkUrl = urlMatch[1];
+
+        moocCourses.push({ name: courseName, teacher: teacherName, platform: platform.name, platformUrl: platform.url, remarkUrl });
+      } catch (err) {
+        console.warn('[EduProxy] 解析 MOOC 课程失败:', err.message);
+      }
+    }
+    return moocCourses;
   }
 
   // ==================== 成绩查询（API） ====================
@@ -1313,7 +1368,7 @@ class EduProxy {
       const res = await this.axiosInstance.get(
         `/student/for-std/grade/sheet/info/${this.studentId}`,
         {
-          params: this.semesterId ? { semester: this.semesterId } : {},
+          params: {},  // 不传 semester 参数，获取所有学期成绩
           timeout: 15000,
         }
       );
@@ -1321,6 +1376,16 @@ class EduProxy {
       const data = res.data;
       if (!data) {
         throw new Error('成绩 API 返回空数据');
+      }
+
+      /* 调试：打印成绩 API 返回的数据结构 */
+      const semKeys = Object.keys(data.semesterId2studentGrades || data.semesters || {});
+      console.log(`[EduProxy] 成绩 API 返回的学期 keys: ${semKeys.join(', ')}`);
+      for (const k of semKeys.slice(0, 1)) {
+        const sampleList = (data.semesterId2studentGrades || data.semesters || {})[k];
+        if (Array.isArray(sampleList) && sampleList.length > 0) {
+          console.log(`[EduProxy] 学期 ${k} 第一条成绩原始数据:`, JSON.stringify(sampleList[0]).substring(0, 500));
+        }
       }
 
       const result = this._parseGradesApiData(data);
@@ -1354,11 +1419,19 @@ class EduProxy {
 
           const credit = parseFloat(item.credits) || 0;
 
-          const courseType = item.courseType?.nameZh || item.courseProperty?.nameZh || '';
+          /* courseType 兼容字符串和对象两种格式
+           * 实际数据: "通识教育必修课" (字符串) 或 { nameZh: "必修课" } (对象) */
+          const courseType = typeof item.courseType === 'string'
+            ? item.courseType
+            : (item.courseType?.nameZh || item.courseProperty?.nameZh || item.courseProperty || '');
           const isRequired = courseType.includes('必修');
           const isElective = courseType.includes('选修');
           let type = '必修';
           if (isElective && !isRequired) type = '选修';
+          if (!isRequired && !isElective) {
+            /* 通识教育必修课等也归类为必修 */
+            type = '必修';
+          }
 
           const semesterName = item.semesterName || '';
           let semester = '';
@@ -1371,28 +1444,34 @@ class EduProxy {
             semester = semId;
           }
 
-          const score = item.score;
-          const gaGrade = item.gaGrade?.nameZh || '';
+          /* gaGrade 兼容字符串和对象两种格式
+           * 实际数据: "85" (数字字符串) 或 "优秀" (等级文字) 或 { nameZh: "优秀" } (对象) */
+          const rawGaGrade = typeof item.gaGrade === 'string'
+            ? item.gaGrade
+            : (item.gaGrade?.nameZh || '');
           const gp = item.gp || 0;
 
+          /* score 字段可能不存在，优先使用 gaGrade 作为分数 */
+          const score = item.score !== undefined && item.score !== null ? item.score : rawGaGrade;
+
           const isScoreText = !isNaN(score) && score !== null;
-          const isGradeLevelText = !isScoreText && gaGrade;
+          const isGradeLevelText = !isScoreText && rawGaGrade;
 
           let displayScore;
           let gpaScore;
 
           if (isScoreText) {
             displayScore = score;
-            gpaScore = score;
+            gpaScore = parseFloat(score);
           } else if (isGradeLevelText) {
             const gradeScoreMap = {
               '优秀': 90, '良好': 85, '中等': 78,
               '及格': 68, '合格': 82, '不合格': 50, '不及格': 50,
             };
-            displayScore = gaGrade;
-            gpaScore = gradeScoreMap[gaGrade] || 0;
+            displayScore = rawGaGrade;
+            gpaScore = gradeScoreMap[rawGaGrade] || 0;
           } else {
-            displayScore = score || gaGrade || '';
+            displayScore = score || rawGaGrade || '';
             gpaScore = 0;
           }
 

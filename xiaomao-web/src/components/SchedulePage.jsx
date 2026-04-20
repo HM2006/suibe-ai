@@ -1,16 +1,16 @@
 /* ========================================
    小贸 - 课表查询页面
-   周选择器 + 课程表格 + 当前时间高亮
+   按教学周查看 + 周六周日支持
    数据来源：用户页面登录教务系统后自动缓存
    ======================================== */
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Clock, MapPin, User, Calendar } from 'lucide-react'
+import { Clock, MapPin, User, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
 import { API } from '../config/api'
 
-/* 星期配置 */
-const weekDays = ['周一', '周二', '周三', '周四', '周五']
+/* 星期配置（含周六周日） */
+const weekDays = ['周一', '周二', '周三', '周四', '周五', '周六', '周日']
 
 /* 时间段配置（14个节次，与教务系统一致） */
 const timeSlots = [
@@ -39,39 +39,43 @@ const courseColors = [
   { bg: '#CFFAFE', text: '#155E75', border: '#A5F3FC' },
   { bg: '#EDE9FE', text: '#5B21B6', border: '#DDD6FE' },
   { bg: '#FEE2E2', text: '#991B1B', border: '#FECACA' },
+  { bg: '#FEF9C3', text: '#854D0E', border: '#FEF08A' },
+  { bg: '#DBEAFE', text: '#1E40AF', border: '#BFDBFE' },
+  { bg: '#F3E8FF', text: '#7E22CE', border: '#E9D5FF' },
 ]
 
-/* 模拟课表数据（按星期排列） - 作为fallback保留 */
-const mockScheduleData = {
-  0: [
-    { name: '高等数学', teacher: '张教授', room: 'A101', time: '08:00-09:40', slot: 0, color: 0 },
-    { name: '大学英语', teacher: '李老师', room: 'B203', time: '10:00-11:40', slot: 1, color: 1 },
-    { name: '数据结构', teacher: '王教授', room: 'C305', time: '14:00-15:40', slot: 2, color: 2 },
-  ],
-  1: [
-    { name: '线性代数', teacher: '赵教授', room: 'A102', time: '08:00-09:40', slot: 0, color: 3 },
-    { name: '计算机网络', teacher: '刘教授', room: 'D401', time: '14:00-15:40', slot: 2, color: 4 },
-    { name: '体育课', teacher: '陈老师', room: '体育馆', time: '16:00-17:40', slot: 3, color: 5 },
-  ],
-  2: [
-    { name: '高等数学', teacher: '张教授', room: 'A101', time: '08:00-09:40', slot: 0, color: 0 },
-    { name: '操作系统', teacher: '孙教授', room: 'E201', time: '10:00-11:40', slot: 1, color: 6 },
-    { name: '大学英语', teacher: '李老师', room: 'B203', time: '14:00-15:40', slot: 2, color: 1 },
-  ],
-  3: [
-    { name: '线性代数', teacher: '赵教授', room: 'A102', time: '08:00-09:40', slot: 0, color: 3 },
-    { name: '数据结构', teacher: '王教授', room: 'C305', time: '10:00-11:40', slot: 1, color: 2 },
-    { name: '计算机网络', teacher: '刘教授', room: 'D401', time: '16:00-17:40', slot: 3, color: 4 },
-  ],
-  4: [
-    { name: '操作系统', teacher: '孙教授', room: 'E201', time: '08:00-09:40', slot: 0, color: 6 },
-    { name: '思想政治', teacher: '周老师', room: 'F101', time: '10:00-11:40', slot: 1, color: 5 },
-  ],
+/**
+ * 从所有课程中计算最大周数
+ */
+function getMaxWeek(allCourses) {
+  let max = 1
+  for (const dayCourses of Object.values(allCourses)) {
+    if (!Array.isArray(dayCourses)) continue
+    for (const c of dayCourses) {
+      if (Array.isArray(c.weekIndexes) && c.weekIndexes.length > 0) {
+        const m = Math.max(...c.weekIndexes)
+        if (m > max) max = m
+      }
+    }
+  }
+  return max
 }
 
-/* 将真实课表数据转换为组件格式 */
+/**
+ * 判断某门课在指定周是否有课
+ * weekIndexes 是该课有课的周次数组，如 [1,2,3,4,5,7,8,9,10,11,12,13,14,15,16]
+ */
+function isCourseInWeek(course, weekNum) {
+  if (!course.weekIndexes || course.weekIndexes.length === 0) return true // 无周次信息则默认显示
+  return course.weekIndexes.includes(weekNum)
+}
+
+/**
+ * 将后端原始课表数据转换为组件格式
+ * 后端数据格式: { 0: [{name, teacher, location, time, slot, endSlot, day, weeks, weekIndexes, ...}], ... }
+ */
 function transformRealSchedule(realData) {
-  const result = { 0: [], 1: [], 2: [], 3: [], 4: [] }
+  const result = { 0: [], 1: [], 2: [], 3: [], 4: [], 5: [], 6: [] }
 
   if (!realData) return result
 
@@ -87,27 +91,27 @@ function transformRealSchedule(realData) {
           courseColorMap[course.name] = colorIndex % courseColors.length
           colorIndex++
         }
-        if (dayKey < 5) {
-          result[dayKey].push({
-            name: course.name,
-            teacher: course.teacher || '',
-            room: course.location || '',
-            time: course.time || '',
-            slot: course.slot ?? 0,
-            color: courseColorMap[course.name],
-            weeks: course.weeks || '',
-            type: course.type || '',
-            code: course.code || '',
-            enrollment: course.enrollment || '',
-          })
-        }
+        result[dayKey].push({
+          name: course.name,
+          teacher: course.teacher || '',
+          room: course.location || '',
+          time: course.time || '',
+          slot: course.slot ?? 0,
+          endSlot: course.endSlot ?? course.slot ?? 0,
+          color: courseColorMap[course.name],
+          weeks: course.weeks || '',
+          weekIndexes: course.weekIndexes || [],
+          type: course.type || '',
+          code: course.code || '',
+          enrollment: course.enrollment || '',
+        })
       })
     }
   } else if (Array.isArray(realData)) {
-    const weekdayToIndex = { '周一': 0, '周二': 1, '周三': 2, '周四': 3, '周五': 4 }
+    const weekdayToIndex = { '周一': 0, '周二': 1, '周三': 2, '周四': 3, '周五': 4, '周六': 5, '周日': 6 }
     realData.forEach((dayData) => {
       const dayIndex = typeof dayData.day === 'number' ? dayData.day - 1 : weekdayToIndex[dayData.weekday]
-      if (dayIndex === undefined || dayIndex < 0 || dayIndex > 4) return
+      if (dayIndex === undefined || dayIndex < 0 || dayIndex > 6) return
       if (!(dayData.name in courseColorMap)) {
         courseColorMap[dayData.name] = colorIndex % courseColors.length
         colorIndex++
@@ -118,8 +122,10 @@ function transformRealSchedule(realData) {
         room: dayData.location || '',
         time: dayData.time || '',
         slot: dayData.slot ?? 0,
+        endSlot: dayData.endSlot ?? dayData.slot ?? 0,
         color: courseColorMap[dayData.name],
         weeks: dayData.weeks || '',
+        weekIndexes: dayData.weekIndexes || [],
         type: dayData.type || '',
       })
     })
@@ -130,9 +136,10 @@ function transformRealSchedule(realData) {
 
 function SchedulePage() {
   const navigate = useNavigate()
-  const today = new Date().getDay()
+  const today = new Date()
+  const todayDayIndex = today.getDay() // 0=周日, 1=周一, ..., 6=周六
   const [selectedDay, setSelectedDay] = useState(
-    today >= 1 && today <= 5 ? today - 1 : 0
+    todayDayIndex >= 1 && todayDayIndex <= 7 ? todayDayIndex - 1 : 0
   )
 
   const { user, token } = useUser()
@@ -140,6 +147,10 @@ function SchedulePage() {
   /* 真实课表数据（从缓存加载） */
   const [realSchedule, setRealSchedule] = useState(null)
   const [dataSource, setDataSource] = useState('mock')
+
+  /* 周选择器状态 */
+  const [selectedWeek, setSelectedWeek] = useState(8) // 默认第8周
+  const [maxWeek, setMaxWeek] = useState(20)
 
   /* 组件挂载时，从profile获取缓存的课表数据 */
   useEffect(() => {
@@ -160,6 +171,7 @@ function SchedulePage() {
           if (hasData) {
             setRealSchedule(transformed)
             setDataSource('cached')
+            setMaxWeek(getMaxWeek(transformed))
           }
         }
       } catch (err) {
@@ -193,8 +205,19 @@ function SchedulePage() {
     return -1
   }, [])
 
-  /* 当前使用的课表数据 */
-  const scheduleData = realSchedule || {}
+  /* 按选中的周过滤课表数据 */
+  const filteredSchedule = useMemo(() => {
+    if (!realSchedule) return {}
+    const filtered = {}
+    for (let day = 0; day < 7; day++) {
+      const dayCourses = realSchedule[day] || []
+      filtered[day] = dayCourses.filter(c => isCourseInWeek(c, selectedWeek))
+    }
+    return filtered
+  }, [realSchedule, selectedWeek])
+
+  /* 当前使用的课表数据（过滤后） */
+  const scheduleData = filteredSchedule
 
   /* 获取指定位置的课程（考虑跨节次） */
   const getCourse = (day, slot) => {
@@ -206,7 +229,7 @@ function SchedulePage() {
     }) || null
   }
 
-  /* 判断是否是课程的起始节次（用于决定是否显示课程卡） */
+  /* 判断是否是课程的起始节次 */
   const isCourseStart = (day, slot) => {
     const courses = scheduleData[day] || []
     const course = courses.find((c) => {
@@ -231,9 +254,17 @@ function SchedulePage() {
 
   /* 判断是否为当前时间 */
   const isCurrentSlot = (day, slot) => {
-    const todayIndex = new Date().getDay() - 1
-    return todayIndex === day && currentTimeSlot === slot
+    const todayIdx = today.getDay() - 1
+    return todayIdx === day && currentTimeSlot === slot
   }
+
+  /* 统计选中周的课程数量 */
+  const weekCourseCount = useMemo(() => {
+    return Object.values(scheduleData).reduce((sum, courses) => sum + courses.length, 0)
+  }, [scheduleData])
+
+  /* 快捷周选择按钮 */
+  const quickWeeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 
   return (
     <div className="schedule-container">
@@ -241,7 +272,7 @@ function SchedulePage() {
       <div className="page-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
         <div>
           <h1 className="page-title">课表查询</h1>
-          <p className="page-desc">查看本周课程安排</p>
+          <p className="page-desc">按教学周查看课程安排</p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {dataSource === 'cached' && (
@@ -284,7 +315,81 @@ function SchedulePage() {
       {/* 有数据时显示课表 */}
       {realSchedule && (<>
 
-      {/* 星期选择器 */}
+      {/* ====== 周选择器 ====== */}
+      <div style={{
+        background: 'var(--card-bg)',
+        border: '1px solid var(--card-border)',
+        borderRadius: 'var(--radius-lg)',
+        padding: '12px 16px',
+        marginBottom: '12px',
+      }}>
+        {/* 周导航 */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
+          <button
+            onClick={() => setSelectedWeek(w => Math.max(1, w - 1))}
+            disabled={selectedWeek <= 1}
+            style={{
+              width: '32px', height: '32px', borderRadius: '8px',
+              border: '1px solid var(--card-border)', background: 'var(--card-bg)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: selectedWeek <= 1 ? 'not-allowed' : 'pointer',
+              opacity: selectedWeek <= 1 ? 0.4 : 1,
+              color: 'var(--text-primary)',
+            }}
+          >
+            <ChevronLeft size={16} />
+          </button>
+
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
+              第 {selectedWeek} 教学周
+            </div>
+            <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              本周共 {weekCourseCount} 节课
+            </div>
+          </div>
+
+          <button
+            onClick={() => setSelectedWeek(w => Math.min(maxWeek, w + 1))}
+            disabled={selectedWeek >= maxWeek}
+            style={{
+              width: '32px', height: '32px', borderRadius: '8px',
+              border: '1px solid var(--card-border)', background: 'var(--card-bg)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              cursor: selectedWeek >= maxWeek ? 'not-allowed' : 'pointer',
+              opacity: selectedWeek >= maxWeek ? 0.4 : 1,
+              color: 'var(--text-primary)',
+            }}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+
+        {/* 快捷周选择 */}
+        <div style={{
+          display: 'flex', flexWrap: 'wrap', gap: '4px',
+        }}>
+          {quickWeeks.filter(w => w <= maxWeek).map(w => (
+            <button
+              key={w}
+              onClick={() => setSelectedWeek(w)}
+              style={{
+                minWidth: '32px', height: '26px', borderRadius: '6px',
+                border: selectedWeek === w ? 'none' : '1px solid var(--card-border)',
+                background: selectedWeek === w ? 'var(--primary)' : 'transparent',
+                color: selectedWeek === w ? '#fff' : 'var(--text-secondary)',
+                fontSize: '12px', fontWeight: selectedWeek === w ? 600 : 400,
+                cursor: 'pointer', padding: '0 6px',
+                transition: 'all 0.15s',
+              }}
+            >
+              {w}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* ====== 星期选择器 ====== */}
       <div className="schedule-week-selector">
         {weekDays.map((day, index) => (
           <button
@@ -297,10 +402,13 @@ function SchedulePage() {
         ))}
       </div>
 
-      {/* 今日课程概览（移动端友好） */}
+      {/* ====== 当日课程概览（移动端友好） ====== */}
       <div className="schedule-overview">
         <h3 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px', color: 'var(--text-primary)' }}>
           {weekDays[selectedDay]}课程概览
+          <span style={{ fontSize: '12px', fontWeight: 400, color: 'var(--text-muted)', marginLeft: '8px' }}>
+            第{selectedWeek}周
+          </span>
         </h3>
         {scheduleData[selectedDay] && scheduleData[selectedDay].length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
@@ -311,7 +419,7 @@ function SchedulePage() {
                 const isCurrent = isCurrentSlot(selectedDay, course.slot)
                 return (
                   <div
-                    key={course.name + course.time}
+                    key={course.name + course.time + course.weekIndexes?.join(',')}
                     style={{
                       display: 'flex',
                       alignItems: 'center',
@@ -378,23 +486,24 @@ function SchedulePage() {
               fontSize: '14px',
             }}
           >
-            今天没有课程，好好休息吧！
+            第{selectedWeek}周 {weekDays[selectedDay]} 没有课程
           </div>
         )}
       </div>
 
-      {/* 课程表格（桌面端显示） */}
+      {/* ====== 课程表格（桌面端显示） ====== */}
       <div className="schedule-table">
         {/* 表头 */}
         <div className="schedule-table-header">
           <div className="header-cell">时间</div>
-          {weekDays.map((day) => (
+          {weekDays.map((day, index) => (
             <div
               key={day}
               className="header-cell"
               style={{
-                background: selectedDay === weekDays.indexOf(day) ? '#EEF2FF' : undefined,
-                color: selectedDay === weekDays.indexOf(day) ? '#4F46E5' : undefined,
+                background: selectedDay === index ? '#EEF2FF' : undefined,
+                color: selectedDay === index ? '#4F46E5' : undefined,
+                fontWeight: selectedDay === index ? 600 : undefined,
               }}
             >
               {day}
@@ -415,7 +524,7 @@ function SchedulePage() {
                 </span>
               </div>
 
-              {[0, 1, 2, 3, 4].map((dayIndex) => {
+              {[0, 1, 2, 3, 4, 5, 6].map((dayIndex) => {
                 const course = getCourse(dayIndex, slotIndex)
                 const isCurrent = isCurrentSlot(dayIndex, slotIndex)
                 const isStart = isCourseStart(dayIndex, slotIndex)

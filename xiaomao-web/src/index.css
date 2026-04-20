@@ -1074,7 +1074,7 @@ select {
 
 .schedule-table-header {
   display: grid;
-  grid-template-columns: 80px repeat(5, 1fr);
+  grid-template-columns: 80px repeat(7, 1fr);
   background: var(--surface-container-low);
 }
 
@@ -1088,7 +1088,7 @@ select {
 
 .schedule-table-body {
   display: grid;
-  grid-template-columns: 80px repeat(5, 1fr);
+  grid-template-columns: 80px repeat(7, 1fr);
 }
 
 .time-cell {
@@ -2452,7 +2452,7 @@ select {
 
   .schedule-table-header,
   .schedule-table-body {
-    grid-template-columns: 50px repeat(5, 1fr);
+    grid-template-columns: 50px repeat(7, 1fr);
   }
 
   .schedule-table {
@@ -2526,7 +2526,7 @@ select {
 @media (max-width: 375px) {
   .schedule-table-header,
   .schedule-table-body {
-    grid-template-columns: 40px repeat(5, 1fr);
+    grid-template-columns: 40px repeat(7, 1fr);
   }
 
   .time-cell {

@@ -1,33 +1,50 @@
 /* ========================================
-   小贸 - 教务系统登录弹窗组件（手动确认版）
+   小贸 - 教务系统登录弹窗组件（自动轮询版）
 
-   修改内容：
-   1. 移除自动轮询登录状态检测
-   2. 添加"我已登录"手动确认按钮
-   3. 用户扫码后需手动点击确认，避免误判
+   逻辑：
+   1. 获取二维码并显示
+   2. 自动轮询后端检测扫码状态
+   3. 检测到登录成功后自动关闭弹窗并同步数据
    ======================================== */
-import { useState, useEffect, useRef } from 'react'
-import { X, QrCode, RefreshCw, CheckCircle, AlertCircle, Loader, LogIn } from 'lucide-react'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { X, QrCode, RefreshCw, CheckCircle, AlertCircle, Loader } from 'lucide-react'
 import { API } from '../config/api'
 
 /* 请求超时时间（毫秒） */
 const QR_FETCH_TIMEOUT = 60000
+/* 轮询间隔（毫秒） */
+const POLL_INTERVAL = 3000
+/* 最大轮询次数（约 2 分钟） */
+const MAX_POLL_COUNT = 40
 
 function EduLoginModal({ isOpen, onClose, onLoginSuccess }) {
   const [qrImage, setQrImage] = useState('')
-  /* 状态：loading | waiting | confirming | success | error */
+  /* 状态：loading | waiting | polling | success | error | expired */
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState('')
   const [loadingText, setLoadingText] = useState('正在启动浏览器...')
-  const [confirming, setConfirming] = useState(false)
+  const [pollCount, setPollCount] = useState(0)
   const abortControllerRef = useRef(null)
+  const pollTimerRef = useRef(null)
+  const pollCountRef = useRef(0)
+
+  /* 清理轮询定时器 */
+  const clearPollTimer = useCallback(() => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current)
+      pollTimerRef.current = null
+    }
+  }, [])
 
   /* 获取登录二维码 */
-  const fetchQRCode = async () => {
+  const fetchQRCode = useCallback(async () => {
     setStatus('loading')
     setError('')
     setQrImage('')
     setLoadingText('正在启动浏览器...')
+    setPollCount(0)
+    pollCountRef.current = 0
+    clearPollTimer()
 
     /* 取消之前的请求 */
     if (abortControllerRef.current) {
@@ -52,7 +69,6 @@ function EduLoginModal({ isOpen, onClose, onLoginSuccess }) {
     }, 4000)
 
     try {
-      /* 设置请求超时 */
       const timeoutId = setTimeout(() => controller.abort(), QR_FETCH_TIMEOUT)
 
       const res = await fetch(`${API.edu}/login/qr`, {
@@ -67,8 +83,6 @@ function EduLoginModal({ isOpen, onClose, onLoginSuccess }) {
       }
 
       const data = await res.json()
-
-      /* 修复：正确解析嵌套的响应结构 */
       const qrCodeImage = data.data?.qrCodeImage || data.qrCodeImage || data.data?.qrImage
 
       if (data.success && qrCodeImage) {
@@ -91,71 +105,77 @@ function EduLoginModal({ isOpen, onClose, onLoginSuccess }) {
         setError(err.message || '网络错误，请检查后端服务是否启动')
       }
     }
-  }
+  }, [clearPollTimer])
 
-  /* 手动确认登录：用户点击"我已登录"后检查登录状态 */
-  const handleConfirmLogin = async () => {
-    setConfirming(true)
-    try {
-      const res = await fetch(`${API.edu}/login/check`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ timeout: 5000 }),
-      })
-      const data = await res.json()
+  /* 轮询检测登录状态 */
+  const startPolling = useCallback(() => {
+    clearPollTimer()
+    pollCountRef.current = 0
 
-      const loggedIn = data.data?.loggedIn === true
+    pollTimerRef.current = setInterval(async () => {
+      pollCountRef.current++
+      setPollCount(pollCountRef.current)
 
-      if (loggedIn) {
-        setStatus('success')
-        setTimeout(() => {
-          if (onLoginSuccess) onLoginSuccess()
-        }, 1000)
-      } else {
-        setStatus('error')
-        setError('尚未检测到登录成功，请确认是否已完成扫码登录')
-        /* 3秒后恢复到等待状态，让用户可以重试 */
-        setTimeout(() => {
-          if (qrImage) {
-            setStatus('waiting')
-          }
-        }, 3000)
+      if (pollCountRef.current > MAX_POLL_COUNT) {
+        clearPollTimer()
+        setStatus('expired')
+        setError('二维码已过期，请刷新重试')
+        return
       }
-    } catch (err) {
-      console.error('检查登录状态失败:', err)
-      setStatus('error')
-      setError('检查登录状态失败，请重试')
-      setTimeout(() => {
-        if (qrImage) {
-          setStatus('waiting')
-        }
-      }, 3000)
-    } finally {
-      setConfirming(false)
-    }
-  }
 
-  /* 弹窗打开时获取二维码（不再自动轮询） */
+      try {
+        const res = await fetch(`${API.edu}/login/check`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ timeout: 5000 }),
+        })
+        const data = await res.json()
+        const loggedIn = data.data?.loggedIn === true
+
+        if (loggedIn) {
+          clearPollTimer()
+          setStatus('success')
+          /* 自动触发登录成功回调 */
+          setTimeout(() => {
+            if (onLoginSuccess) onLoginSuccess()
+          }, 800)
+        }
+      } catch (err) {
+        console.warn('轮询登录状态失败:', err)
+      }
+    }, POLL_INTERVAL)
+  }, [clearPollTimer, onLoginSuccess])
+
+  /* 弹窗打开时获取二维码，获取成功后自动开始轮询 */
   useEffect(() => {
     if (isOpen) {
       fetchQRCode()
     }
 
     return () => {
+      clearPollTimer()
       if (abortControllerRef.current) {
         abortControllerRef.current.abort()
       }
     }
-  }, [isOpen])
+  }, [isOpen, fetchQRCode, clearPollTimer])
+
+  /* 当状态变为 waiting 时，开始轮询 */
+  useEffect(() => {
+    if (status === 'waiting') {
+      startPolling()
+    }
+  }, [status, startPolling])
 
   const handleClose = () => {
+    clearPollTimer()
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
     setStatus('loading')
     setError('')
     setQrImage('')
-    setConfirming(false)
+    setPollCount(0)
     if (onClose) onClose()
   }
 
@@ -216,7 +236,7 @@ function EduLoginModal({ isOpen, onClose, onLoginSuccess }) {
           </div>
         )}
 
-        {/* 等待扫码 */}
+        {/* 等待扫码（自动轮询中） */}
         {status === 'waiting' && qrImage && (
           <>
             <div className="edu-login-qr-container">
@@ -227,7 +247,7 @@ function EduLoginModal({ isOpen, onClose, onLoginSuccess }) {
               请使用微信扫描二维码登录
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', textAlign: 'center', marginTop: '4px' }}>
-              扫码完成后，请点击下方按钮确认
+              扫码后将自动检测登录状态...
             </div>
           </>
         )}
@@ -241,8 +261,8 @@ function EduLoginModal({ isOpen, onClose, onLoginSuccess }) {
           </div>
         )}
 
-        {/* 错误状态 */}
-        {status === 'error' && (
+        {/* 错误/过期状态 */}
+        {(status === 'error' || status === 'expired') && (
           <div className="edu-login-status" style={{ color: '#DC2626' }}>
             <AlertCircle size={48} />
             <div style={{ fontSize: '14px', fontWeight: 500, maxWidth: '280px', textAlign: 'center', lineHeight: '1.5' }}>
@@ -254,27 +274,11 @@ function EduLoginModal({ isOpen, onClose, onLoginSuccess }) {
         {/* 按钮区域 */}
         {status !== 'success' && (
           <div className="edu-login-actions">
-            {status === 'waiting' && (
-              <>
-                <button
-                  className="edu-login-btn primary"
-                  onClick={handleConfirmLogin}
-                  disabled={confirming}
-                  style={{
-                    opacity: confirming ? 0.7 : 1,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '6px',
-                  }}
-                >
-                  <LogIn size={14} />
-                  {confirming ? '验证中...' : '我已登录'}
-                </button>
-                <button className="edu-login-btn" onClick={handleRefresh}>
-                  <RefreshCw size={14} />
-                  刷新二维码
-                </button>
-              </>
+            {(status === 'waiting' || status === 'expired') && (
+              <button className="edu-login-btn primary" onClick={handleRefresh}>
+                <RefreshCw size={14} />
+                刷新二维码
+              </button>
             )}
             {status === 'error' && (
               <button className="edu-login-btn primary" onClick={handleRefresh}>

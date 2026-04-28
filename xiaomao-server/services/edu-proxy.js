@@ -71,6 +71,8 @@ class EduProxy {
     this.allSemesterIds = [];
     /* axios 实例（带 cookie，用于教务系统 API） */
     this.axiosInstance = null;
+    /* 登录锁：防止并发 waitForLogin 导致重复 _submitLoginForm */
+    this._loginPromise = null;
   }
 
   static getInstance() {
@@ -321,7 +323,7 @@ class EduProxy {
    * 返回: { loggedIn: boolean, message?: string }
    */
   async checkLoginStatus() {
-    if (this.axiosInstance) {
+    if (this.loggedIn) {
       return true;
     }
     return false;
@@ -337,6 +339,23 @@ class EduProxy {
    * 4. 构建 axios 实例，获取学生信息
    */
   async waitForLogin(timeout = LOGIN_TIMEOUT) {
+    /* 如果已有登录流程在进行中，直接等待其结果 */
+    if (this._loginPromise) {
+      console.log('[EduProxy] 已有登录流程在进行中，等待结果...');
+      return this._loginPromise;
+    }
+
+    /* 创建登录 Promise 并缓存 */
+    this._loginPromise = this._doWaitForLogin(timeout);
+    try {
+      const result = await this._loginPromise;
+      return result;
+    } finally {
+      this._loginPromise = null;
+    }
+  }
+
+  async _doWaitForLogin(timeout = LOGIN_TIMEOUT) {
     if (this.loggedIn) {
       return { success: true, cookies: this._cookieList() };
     }
@@ -410,6 +429,12 @@ class EduProxy {
    * 收集 cookie 并传递到下一次请求。
    */
   async _submitLoginForm(serviceParam) {
+    /* 如果已经登录成功，直接返回（防止并发重复提交导致状态被重置） */
+    if (this.loggedIn) {
+      console.log('[EduProxy] 已登录，跳过重复提交');
+      return;
+    }
+
     try {
       /*
        * POST /authserver/login (maxRedirects: 0，手动控制重定向)
@@ -916,16 +941,6 @@ class EduProxy {
       let totalCourses = 0;
       Object.values(scheduleData).forEach(courses => totalCourses += courses.length);
 
-      /* 在同一会话中获取培养方案 */
-      try {
-        console.log('[EduProxy] 课表获取完成，开始获取培养方案...');
-        const program = await this.getTrainingProgram();
-        this._lastTrainingProgram = program;
-        console.log('[EduProxy] 培养方案获取完成');
-      } catch (err) {
-        console.warn('[EduProxy] 培养方案获取失败:', err.message);
-      }
-
       console.log(`[EduProxy] 课表获取完成，共 ${totalCourses} 门课程`);
       return {
         weekday: weekdays[dayOfWeek - 1],
@@ -1388,14 +1403,31 @@ class EduProxy {
         throw new Error('成绩 API 返回空数据');
       }
 
-      /* 调试：打印成绩 API 返回的数据结构 */
+      /* 调试：打印成绩 API 返回的数据结构（完整输出，不截断） */
       const semKeys = Object.keys(data.semesterId2studentGrades || data.semesters || {});
       console.log(`[EduProxy] 成绩 API 返回的学期 keys: ${semKeys.join(', ')}`);
       for (const k of semKeys.slice(0, 1)) {
         const sampleList = (data.semesterId2studentGrades || data.semesters || {})[k];
         if (Array.isArray(sampleList) && sampleList.length > 0) {
-          console.log(`[EduProxy] 学期 ${k} 第一条成绩原始数据:`, JSON.stringify(sampleList[0]).substring(0, 500));
+          console.log(`[EduProxy] 学期 ${k} 第一条成绩完整原始数据:`, JSON.stringify(sampleList[0], null, 2));
+          /* 额外打印 gradeDetail 的完整结构 */
+          if (sampleList[0].gradeDetail) {
+            console.log(`[EduProxy] gradeDetail 完整内容:`, JSON.stringify(sampleList[0].gradeDetail, null, 2));
+          }
+          /* 打印所有顶层字段名，方便发现隐藏字段 */
+          console.log(`[EduProxy] 第一条成绩的所有字段名:`, Object.keys(sampleList[0]).join(', '));
         }
+      }
+      /* 将完整原始数据保存到文件，方便离线分析 */
+      try {
+        const fs = require('fs');
+        const path = require('path');
+        const dataDir = path.join(__dirname, '..', 'data');
+        if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+        fs.writeFileSync(path.join(dataDir, 'grades-raw.json'), JSON.stringify(data, null, 2), 'utf-8');
+        console.log(`[EduProxy] 成绩原始数据已保存到 data/grades-raw.json`);
+      } catch (saveErr) {
+        console.warn('[EduProxy] 保存成绩原始数据失败:', saveErr.message);
       }
 
       const result = this._parseGradesApiData(data);
@@ -1521,6 +1553,252 @@ class EduProxy {
     };
   }
 
+  // ==================== 培养方案完成情况 ====================
+
+  /**
+   * 获取培养方案完成情况页面的 HTML
+   * URL: /student/for-std/program-completion-preview/info/{studentId}
+   */
+  async getProgramCompletionHtml() {
+    this._ensureApiReady();
+
+    if (!this.studentId) {
+      console.log('[EduProxy] studentId 未知，尝试获取...');
+      await this._fetchStudentInfo();
+    }
+
+    if (!this.studentId) {
+      throw new Error('无法获取学生ID，无法获取培养方案完成情况');
+    }
+
+    try {
+      console.log(`[EduProxy] 正在获取培养方案完成情况页面, studentId=${this.studentId}...`);
+      const res = await this.axiosInstance.get(
+        `/student/for-std/program-completion-preview/info/${this.studentId}`,
+        {
+          timeout: 20000,
+          headers: {
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+          },
+        }
+      );
+
+      const html = typeof res.data === 'string' ? res.data : JSON.stringify(res.data);
+      console.log(`[EduProxy] 培养方案完成情况页面获取成功，HTML 长度: ${html.length} 字符`);
+      return html;
+    } catch (error) {
+      console.error('[EduProxy] 获取培养方案完成情况页面失败:', error.message);
+      throw new Error(`获取培养方案完成情况失败: ${error.message}`);
+    }
+  }
+
+  // ==================== 培养方案完成情况（结构化数据） ====================
+
+  /**
+   * 从 HTML 中提取学期代码并映射为中文
+   * 例如: "TERM_2" → "第2学期"
+   */
+  _mapTermCode(termStr) {
+    if (!termStr) return '';
+    const match = termStr.match(/TERM_(\d+)/);
+    if (match) {
+      return `第${match[1]}学期`;
+    }
+    return termStr;
+  }
+
+  /**
+   * 提取 resultType 的 $name 值
+   * 原始格式: { '$type': 'ResultType', '$name': 'PASSED' }
+   */
+  _extractResultType(obj) {
+    if (!obj) return null;
+    if (typeof obj === 'string') return obj;
+    return obj.$name || obj.name || null;
+  }
+
+  /**
+   * 精简课程数据
+   */
+  _simplifyCourse(course) {
+    if (!course) return null;
+    return {
+      nameZh: course.nameZh || '',
+      code: course.code || '',
+      credits: course.credits || 0,
+      score: course.score,
+      gradeStr: course.gradeStr || '',
+      gp: course.gp || 0,
+      compulsory: course.compulsory || false,
+      resultType: this._extractResultType(course.resultType),
+      termsContent: this._mapTermCode(course.termsContent),
+      remark: course.remark || '',
+    };
+  }
+
+  /**
+   * 递归精简模块数据
+   */
+  _simplifyModule(module) {
+    if (!module) return null;
+
+    const result = {
+      nameZh: module.nameZh || '',
+      moduleId: module.moduleId || '',
+      typeCode: module.typeCode || '',
+      requireInfo: module.requireInfo ? {
+        credits: module.requireInfo.credits || 0,
+        subModuleNum: module.requireInfo.subModuleNum || 0,
+      } : undefined,
+      completionSummary: module.completionSummary ? {
+        passedCredits: module.completionSummary.passedCredits || 0,
+        failedCredits: module.completionSummary.failedCredits || 0,
+        takingCredits: module.completionSummary.takingCredits || 0,
+      } : undefined,
+      resultType: this._extractResultType(module.resultType),
+      creditsOverflow: module.creditsOverflow || false,
+      overflowCredits: module.overflowCredits || 0,
+    };
+
+    // 递归处理子模块
+    if (module.moduleList && Array.isArray(module.moduleList) && module.moduleList.length > 0) {
+      result.children = module.moduleList.map(m => this._simplifyModule(m)).filter(Boolean);
+    }
+
+    // 处理叶子模块的课程列表
+    if (module.courseList && Array.isArray(module.courseList) && module.courseList.length > 0) {
+      result.courseList = module.courseList.map(c => this._simplifyCourse(c)).filter(Boolean);
+    }
+
+    // 移除 undefined 字段
+    for (const key of Object.keys(result)) {
+      if (result[key] === undefined) {
+        delete result[key];
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * 获取培养方案完成情况的结构化数据
+   * 从 HTML 页面中提取 var model = {...} 的 JSON 数据并精简
+   */
+  async getProgramCompletion() {
+    const html = await this.getProgramCompletionHtml();
+
+    console.log('[EduProxy] 正在从 HTML 中提取培养方案 JSON 数据...');
+
+    // 用正则提取 var model = {...};
+    // model 是一个巨大的单行 JSON 对象（约 3.9MB），需要贪婪匹配到最后一个 };
+    // 策略：先找到 "var model = " 的起始位置，然后找到后面 "};\n    var " 的结束位置
+    let modelJsonStr;
+    const modelStartIdx = html.indexOf('var model = ');
+    if (modelStartIdx === -1) {
+      throw new Error('无法在 HTML 中找到 var model 声明');
+    }
+    // 跳过 "var model = " 前缀
+    const jsonStartIdx = html.indexOf('{', modelStartIdx);
+    if (jsonStartIdx === -1) {
+      throw new Error('无法找到 model JSON 起始位置');
+    }
+    // 从 jsonStartIdx 开始，找到匹配的 "};\n" （JSON 对象的结束）
+    // 使用简单的启发式：找到 "};\n" 后面跟着 "    var " 的位置
+    const searchFrom = jsonStartIdx + 1;
+    const endPattern = '};\n    var ';
+    const endIdx = html.indexOf(endPattern, searchFrom);
+    if (endIdx === -1) {
+      // 备用：尝试其他结束模式
+      const endIdx2 = html.indexOf('};\nvar ', searchFrom);
+      if (endIdx2 === -1) {
+        console.error('[EduProxy] 无法找到 model JSON 结束位置');
+        console.error('[EduProxy] model 起始位置:', modelStartIdx, '附近内容:', html.substring(modelStartIdx, modelStartIdx + 100));
+        throw new Error('无法从培养方案页面中提取 model 数据，页面结构可能已变更');
+      }
+      modelJsonStr = html.substring(jsonStartIdx, endIdx2 + 1);
+    } else {
+      modelJsonStr = html.substring(jsonStartIdx, endIdx + 1);
+    }
+
+    console.log(`[EduProxy] model JSON 提取成功，长度: ${modelJsonStr.length} 字符`);
+
+    let model;
+    try {
+      // HTML 中的 model 使用 JavaScript 对象字面量语法（单引号），不是标准 JSON
+      // 使用 Function 构造器安全解析
+      model = (new Function('return ' + modelJsonStr))();
+    } catch (parseErr) {
+      console.error('[EduProxy] model 解析失败:', parseErr.message);
+      console.error('[EduProxy] 提取的字符串前200字符:', modelJsonStr.substring(0, 200));
+      throw new Error(`培养方案数据解析失败: ${parseErr.message}`);
+    }
+
+    console.log('[EduProxy] model JSON 解析成功，开始精简数据...');
+
+    // 精简顶层结构
+    const program = model.program || {};
+    const student = model.student || {};
+    const person = student.person || {};
+
+    const simplified = {
+      program: {
+        nameZh: program.nameZh || '',
+        grade: program.grade || '',
+        id: program.id || '',
+      },
+      student: {
+        id: student.id || '',
+        code: student.code || '',
+        grade: student.grade || '',
+        name: person.name || '',
+      },
+      requireInfo: model.requireInfo ? {
+        credits: model.requireInfo.credits || 0,
+        subModuleNum: model.requireInfo.subModuleNum || 0,
+      } : undefined,
+      completionSummary: model.completionSummary ? {
+        passedCredits: model.completionSummary.passedCredits || 0,
+        failedCredits: model.completionSummary.failedCredits || 0,
+        takingCredits: model.completionSummary.takingCredits || 0,
+      } : undefined,
+      outerCompletionSummary: model.outerCompletionSummary ? {
+        passedCredits: model.outerCompletionSummary.passedCredits || 0,
+        failedCredits: model.outerCompletionSummary.failedCredits || 0,
+        takingCredits: model.outerCompletionSummary.takingCredits || 0,
+      } : undefined,
+    };
+
+    // 递归精简模块列表
+    if (model.moduleList && Array.isArray(model.moduleList)) {
+      simplified.modules = model.moduleList.map(m => this._simplifyModule(m)).filter(Boolean);
+    }
+
+    // 精简外部课程列表
+    if (model.outerCourseList && Array.isArray(model.outerCourseList)) {
+      simplified.outerCourseList = model.outerCourseList.map(c => ({
+        nameZh: c.nameZh || '',
+        code: c.code || '',
+        credits: c.credits || 0,
+        score: c.score,
+        gradeStr: c.gradeStr || '',
+        gp: c.gp || 0,
+        resultType: this._extractResultType(c.resultType),
+        outerCourseTransferModuleName: c.outerCourseTransferModuleName || '',
+        remark: c.remark || '',
+      })).filter(Boolean);
+    }
+
+    // 移除 undefined 字段
+    for (const key of Object.keys(simplified)) {
+      if (simplified[key] === undefined) {
+        delete simplified[key];
+      }
+    }
+
+    console.log(`[EduProxy] 培养方案数据精简完成，模块数: ${simplified.modules?.length || 0}，外部课程数: ${simplified.outerCourseList?.length || 0}`);
+    return simplified;
+  }
+
   // ==================== 辅助方法 ====================
 
   _ensureApiReady() {
@@ -1545,72 +1823,6 @@ class EduProxy {
       this.loggedIn = false;
       return false;
     }
-  }
-
-  async getTrainingProgram() {
-    if (!this.axiosInstance) throw new Error('未登录教务系统');
-    console.log('[EduProxy] 培养方案: 获取 programId...');
-    let programId = this.programId || 26740;
-    if (programId) {
-      console.log('[EduProxy] 培养方案: 使用 programId:', programId);
-    }
-    const url = `/student/for-std/credit-certification-apply/other_apply/get-all-course-module?programId=${programId}`;
-    console.log('[EduProxy] 培养方案: 请求', url);
-    const res = await this.axiosInstance.get(url, { timeout: 30000 });
-    const data = res.data;
-    if (!data) throw new Error('培养方案数据为空');
-    console.log('[EduProxy] 培养方案: 数据获取成功，大小:', JSON.stringify(data).length, '字节');
-    this._lastTrainingProgramRaw = data;
-    return this._parseTrainingProgram(data);
-  }
-
-  _parseTrainingProgram(data) {
-    const result = { modules: [], totalRequiredCredits: 0, totalCompletedCredits: 0, totalCourses: 0 };
-    try {
-      const topChildren = data.children || [];
-      console.log('[EduProxy] 培养方案: 顶层有', topChildren.length, '个模块');
-      const parseModule = (mod, depth = 0) => {
-        if (!mod) return null;
-        const name = mod.type?.nameZh || mod.nameZh || mod.name || `模块${mod.id}`;
-        const reqInfo = mod.requireInfo || {};
-        const requiredCredits = parseFloat(reqInfo.requiredCredits) || 0;
-        const node = { id: mod.id, name, requiredCredits, completedCredits: 0, children: [], courses: [], depth, creditBySubModule: mod.creditBySubModule || {} };
-        if (Array.isArray(mod.children) && mod.children.length > 0) {
-          node.children = mod.children.map(c => parseModule(c, depth + 1)).filter(Boolean);
-        }
-        if (Array.isArray(mod.planCourses) && mod.planCourses.length > 0) {
-          node.courses = mod.planCourses.map(pc => {
-            const course = pc.course || {};
-            const marks = pc.planCourseMarks || [];
-            return {
-              id: pc.id, code: course.code || '', name: course.nameZh || course.name || '',
-              credits: parseFloat(course.credits) || 0, compulsory: pc.compulsory || false,
-              property: pc.courseProperty?.nameZh || '', propertyMark: pc.courseProperty?.abbrevia || '',
-              marks: marks.map(m => ({ name: m.nameZh || m.name || '', mark: m.mark || '' })),
-              terms: pc.readableTerms || [], suggestTerms: pc.readableSuggestTerms || [],
-              periodInfo: pc.periodInfo || {}, examMode: pc.examMode?.nameZh || '',
-              preCourses: (pc.preCourses || []).map(p => p.course?.nameZh || p.course?.name || '').filter(Boolean),
-              completed: false, score: '',
-            };
-          });
-        }
-        return node;
-      };
-      result.modules = topChildren.map(m => parseModule(m, 0)).filter(Boolean);
-      const countAll = (modules) => {
-        for (const mod of modules) {
-          result.totalRequiredCredits += mod.requiredCredits || 0;
-          if (mod.courses.length > 0) result.totalCourses += mod.courses.length;
-          if (mod.children.length > 0) countAll(mod.children);
-        }
-      };
-      countAll(result.modules);
-      console.log('[EduProxy] 培养方案解析完成: 总要求学分', result.totalRequiredCredits, '总课程数', result.totalCourses);
-    } catch (err) {
-      console.error('[EduProxy] 培养方案解析失败:', err.message);
-      result.rawData = data;
-    }
-    return result;
   }
 
   async _delay(ms) {

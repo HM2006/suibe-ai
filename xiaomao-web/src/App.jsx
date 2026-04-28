@@ -10,6 +10,7 @@ import CampusPage from './components/CampusPage'
 import CampusMap from './components/CampusMap'
 import SchedulePage from './components/SchedulePage'
 import GradesPage from './components/GradesPage'
+import ProgramPage from './components/ProgramPage'
 import LibraryPage from './components/LibraryPage'
 import NewsPage from './components/NewsPage'
 import UserPage from './components/UserPage'
@@ -19,7 +20,6 @@ import NotesPage from './components/NotesPage'
 import MoocPage from './components/MoocPage'
 import EmptyRoomsPage from './components/EmptyRoomsPage'
 import ParkPage from './components/ParkPage'
-import TrainingProgramPage from './components/TrainingProgramPage'
 
 function App() {
   return (
@@ -44,7 +44,7 @@ function App() {
         <Route path="/campus/grades" element={<Layout><GradesPage /></Layout>} />
 
         {/* 培养方案 */}
-        <Route path="/campus/training" element={<Layout><TrainingProgramPage /></Layout>} />
+        <Route path="/campus/program" element={<Layout><ProgramPage /></Layout>} />
 
         {/* 图书馆 - 暂时隐藏 */}
         {/* <Route path="/campus/library" element={<Layout><LibraryPage /></Layout>} /> */}

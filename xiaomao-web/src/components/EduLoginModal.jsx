@@ -12,9 +12,9 @@ import { API } from '../config/api'
 
 /* 请求超时时间（毫秒） */
 const QR_FETCH_TIMEOUT = 60000
-/* 轮询间隔（毫秒） */
-const POLL_INTERVAL = 3000
-/* 最大轮询次数（约 2 分钟） */
+/* 轮询间隔（毫秒）— 5秒，避免频繁请求触发防火墙 */
+const POLL_INTERVAL = 5000
+/* 最大轮询次数（约 3.3 分钟） */
 const MAX_POLL_COUNT = 40
 
 function EduLoginModal({ isOpen, onClose, onLoginSuccess }) {

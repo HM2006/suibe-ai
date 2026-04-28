@@ -164,12 +164,13 @@ async function sendMessageStream(query, conversationId, userId = 'default-user')
   console.log(`[HiAgent] 发送流式消息: "${query.substring(0, 50)}..."`);
 
   return new Promise((resolve, reject) => {
-    const fullPath = API_BASE + '/chat_query_v2';
+    const fullPath = API_BASE + '/chat_query';
     const url = new URL(fullPath);
     const isHttps = url.protocol === 'https:';
     const payload = JSON.stringify({
       Query: query,
       AppConversationID: convId,
+      ResponseMode: 'streaming',
       UserID: userId,
     });
 

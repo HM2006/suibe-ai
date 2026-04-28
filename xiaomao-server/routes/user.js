@@ -154,9 +154,10 @@ router.get('/user/profile', authMiddleware, (req, res) => {
     });
   }
 
-  // 获取缓存的课表和成绩数据
+  // 获取缓存的课表、成绩和培养方案数据
   const scheduleCache = db.getScheduleCache(userId);
   const gradesCache = db.getGradesCache(userId);
+  const programCache = db.getProgramCache(userId);
 
   res.json({
     success: true,
@@ -180,6 +181,10 @@ router.get('/user/profile', authMiddleware, (req, res) => {
         gpa: gradesCache.gpa,
         total_credits: gradesCache.total_credits,
         updated_at: gradesCache.updated_at,
+      } : null,
+      programCache: programCache ? {
+        data: programCache.data,
+        updated_at: programCache.updated_at,
       } : null,
     },
   });

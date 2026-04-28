@@ -103,6 +103,17 @@ function init() {
     );
   `);
 
+  // 创建培养方案缓存表
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS program_cache (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      data TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now', 'localtime')),
+      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+  `);
+
   // 创建随记表（备忘录式，支持多文件）
   db.exec(`
     CREATE TABLE IF NOT EXISTS notes (
@@ -171,17 +182,6 @@ function init() {
       updated_at TEXT DEFAULT (datetime('now', 'localtime'))
     );
   `);
-
-  // 创建培养方案缓存表
-  db.exec(`
-      CREATE TABLE IF NOT EXISTS training_program_cache (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id INTEGER NOT NULL,
-        data TEXT NOT NULL,
-        updated_at TEXT DEFAULT (datetime('now', 'localtime')),
-        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-      );
-    `);
 
   console.log('[DB] 数据库表初始化完成');
 }
@@ -320,6 +320,40 @@ function saveGradesCache(userId, gradesData, gpa, totalCredits) {
  */
 function getGradesCache(userId) {
   const stmt = db.prepare('SELECT * FROM grades_cache WHERE user_id = ? ORDER BY id DESC LIMIT 1');
+  const row = stmt.get(userId);
+  if (!row) return null;
+  return {
+    ...row,
+    data: JSON.parse(row.data)
+  };
+}
+
+/**
+ * 保存培养方案缓存
+ * @param {number} userId
+ * @param {object} programData - 培养方案数据对象
+ */
+function saveProgramCache(userId, programData) {
+  const dataStr = JSON.stringify(programData);
+  const deleteStmt = db.prepare('DELETE FROM program_cache WHERE user_id = ?');
+  const insertStmt = db.prepare(
+    "INSERT INTO program_cache (user_id, data, updated_at) VALUES (?, ?, datetime('now', 'localtime'))"
+  );
+
+  const transaction = db.transaction(() => {
+    deleteStmt.run(userId);
+    insertStmt.run(userId, dataStr);
+  });
+  transaction();
+}
+
+/**
+ * 获取培养方案缓存
+ * @param {number} userId
+ * @returns {object|null} 培养方案数据对象
+ */
+function getProgramCache(userId) {
+  const stmt = db.prepare('SELECT * FROM program_cache WHERE user_id = ? ORDER BY id DESC LIMIT 1');
   const row = stmt.get(userId);
   if (!row) return null;
   return {
@@ -536,25 +570,6 @@ function getUserCourseNames(userId) {
   return Array.from(nameSet);
 }
 
-function saveTrainingProgramCache(userId, programData) {
-  const data = JSON.stringify(programData);
-  const stmt = db.prepare(
-    "INSERT INTO training_program_cache (user_id, data, updated_at) VALUES (?, ?, datetime('now','localtime'))"
-  );
-  stmt.run(userId, data);
-}
-
-function getTrainingProgramCache(userId) {
-  try {
-    const stmt = db.prepare('SELECT * FROM training_program_cache WHERE user_id = ? ORDER BY id DESC LIMIT 1');
-    const row = stmt.get(userId);
-    if (!row) return null;
-    return { ...row, data: JSON.parse(row.data) };
-  } catch (e) {
-    return null;
-  }
-}
-
 /**
  * 获取数据库实例（供需要直接操作db的模块使用）
  * @returns {Database}
@@ -575,6 +590,8 @@ module.exports = {
   getScheduleCache,
   saveGradesCache,
   getGradesCache,
+  saveProgramCache,
+  getProgramCache,
   getAllUsers,
   getUserStats,
   updateUserNickname,
@@ -592,7 +609,4 @@ module.exports = {
   getNoteAttachmentsWithData,
   deleteAttachment,
   getUserCourseNames,
-  // 培养方案
-  saveTrainingProgramCache,
-  getTrainingProgramCache,
 };

@@ -346,35 +346,26 @@ function UserProfile() {
     }
   }
 
-  /* 教务系统登录成功后自动获取课表和成绩 */
+  /* 教务系统登录成功后自动获取课表、成绩和培养方案完成情况 */
   const handleEduLoginSuccess = useCallback(async () => {
     setShowEduLoginModal(false)
     setEduSyncing(true)
     setEduSyncStatus('')
-    let scheduleOk = false
-    let gradesOk = false
+    let syncOk = false
 
     try {
-      /* 先获取成绩（不需要 semesterId，同时能帮助后端获取 semesterId） */
+      /* 使用 sync 端点一次性获取课表、成绩和培养方案完成情况 */
       try {
-        const res = await fetch(`${API.edu}/grades?userId=${user.id}`)
+        const res = await fetch(`${API.edu}/sync?userId=${user.id}`)
         if (res.ok) {
           const data = await res.json()
-          if (data.success) { gradesOk = true }
+          if (data.success) {
+            syncOk = true
+            console.log('[UserPage] 同步完成，培养方案保存:', data.data?.programSaved)
+          }
         }
       } catch (err) {
-        console.warn('[UserPage] 成绩同步失败:', err)
-      }
-
-      /* 再获取课表（此时后端已从成绩数据中获取到 semesterId） */
-      try {
-        const res = await fetch(`${API.edu}/schedule?userId=${user.id}`)
-        if (res.ok) {
-          const data = await res.json()
-          if (data.success) { scheduleOk = true }
-        }
-      } catch (err) {
-        console.warn('[UserPage] 课表同步失败:', err)
+        console.warn('[UserPage] 数据同步失败:', err)
       }
 
       /* 获取完毕，关闭教务会话 */
@@ -382,7 +373,8 @@ function UserProfile() {
         await fetch(`${API.edu}/logout?userId=${user.id}`, { method: 'POST' })
       } catch (err) { /* ignore */ }
 
-      if (scheduleOk || gradesOk) {
+      if (syncOk) {
+        /* 先刷新 profile（更新 eduConnected），再显示成功状态 */
         await refreshProfile()
         setEduSyncStatus('success')
       } else {
@@ -393,7 +385,10 @@ function UserProfile() {
       setEduSyncStatus('error')
     } finally {
       setEduSyncing(false)
-      setTimeout(() => setEduSyncStatus(''), 3000)
+      /* 成功时不自动清除状态，让 eduConnected 接管显示；失败时3秒后清除 */
+      if (!syncOk) {
+        setTimeout(() => setEduSyncStatus(''), 3000)
+      }
     }
   }, [user?.id, refreshProfile])
 
@@ -540,7 +535,7 @@ function UserProfile() {
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '14px', fontWeight: 500 }}>教务系统</div>
               <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
-                {eduSyncing ? '正在同步课表和成绩数据...' :
+                {eduSyncing ? '正在同步课表、成绩和培养方案数据...' :
                  eduSyncStatus === 'success' ? '数据已同步到本地缓存' :
                  eduSyncStatus === 'error' ? '同步失败，请重试' :
                  user.eduConnected ? '数据已同步 · 点击可重新获取最新数据' : '未连接 · 点击登录教务系统获取数据'}

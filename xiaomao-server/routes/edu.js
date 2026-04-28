@@ -9,6 +9,8 @@
  */
 
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const { asyncHandler, AppError } = require('../middleware/errorHandler');
 const EduProxy = require('../services/edu-proxy');
 
@@ -112,11 +114,24 @@ router.get('/edu/login/qr', asyncHandler(async (req, res) => {
 
 /**
  * POST /api/edu/login/check - 检查登录状态
+ * 优化：先检查 loggedIn 标志，已登录直接返回，避免每次 check 都请求教务系统
  */
 router.post('/edu/login/check', asyncHandler(async (req, res) => {
   const eduProxy = getEduProxy();
-  const { timeout = 5000 } = req.body;
 
+  /* 优先检查内存中的 loggedIn 标志（零网络开销） */
+  if (eduProxy.loggedIn) {
+    res.json({
+      success: true,
+      data: {
+        loggedIn: true,
+        message: '已登录教务系统'
+      }
+    });
+    return;
+  }
+
+  /* 再通过实际请求验证（仅在 loggedIn=false 时） */
   const alreadyLoggedIn = await eduProxy.checkLoginStatus();
 
   if (alreadyLoggedIn) {
@@ -130,6 +145,7 @@ router.post('/edu/login/check', asyncHandler(async (req, res) => {
     return;
   }
 
+  const { timeout = 5000 } = req.body;
   const result = await eduProxy.waitForLogin(parseInt(timeout, 10));
 
   if (result.success) {
@@ -169,10 +185,6 @@ router.get('/edu/schedule', asyncHandler(async (req, res) => {
       db.saveScheduleCache(parseInt(userId), scheduleData);
       db.updateEduConnected(parseInt(userId), 1);
       console.log(`[EduRoute] 课表数据已缓存到用户 ${userId}，已更新连接状态`);
-      if (eduProxy._lastTrainingProgram) {
-        db.saveTrainingProgramCache(parseInt(userId), eduProxy._lastTrainingProgram);
-        console.log(`[EduRoute] 培养方案数据已缓存到用户 ${userId}`);
-      }
     } catch (cacheErr) {
       console.warn('[EduRoute] 缓存课表数据失败:', cacheErr.message);
     }
@@ -246,8 +258,8 @@ router.get('/edu/grades', asyncHandler(async (req, res) => {
 // ==================== 合并同步 ====================
 
 /**
- * GET /api/edu/sync - 一次请求获取课表和成绩并缓存
- * 纯 HTTP 版本：课表和成绩可以并行获取
+ * GET /api/edu/sync - 一次请求获取课表、成绩和培养方案完成情况并缓存
+ * 纯 HTTP 版本：课表和成绩可以并行获取，培养方案单独获取
  */
 router.get('/edu/sync', asyncHandler(async (req, res) => {
   const eduProxy = getEduProxy();
@@ -258,6 +270,7 @@ router.get('/edu/sync', asyncHandler(async (req, res) => {
 
   const { userId, semester } = req.query;
 
+  /* 并行获取课表和成绩 */
   const [scheduleData, gradesData] = await Promise.all([
     eduProxy.getSchedule(),
     eduProxy.getGrades(),
@@ -266,6 +279,22 @@ router.get('/edu/sync', asyncHandler(async (req, res) => {
   if (semester && gradesData.grades) {
     gradesData.grades = gradesData.grades.filter(g => g.semester === semester);
     gradesData.courseCount = gradesData.grades.length;
+  }
+
+  /* 获取培养方案完成情况结构化数据并缓存到数据库 */
+  let programSaved = false;
+  try {
+    const programData = await eduProxy.getProgramCompletion();
+    if (programData) {
+      if (userId) {
+        const db = require('../services/database');
+        db.saveProgramCache(parseInt(userId), programData);
+      }
+      programSaved = true;
+      console.log(`[EduRoute] 培养方案完成情况数据已获取并缓存，模块数: ${programData.modules?.length || 0}`);
+    }
+  } catch (programErr) {
+    console.warn('[EduRoute] 获取培养方案完成情况失败（不影响其他数据同步）:', programErr.message);
   }
 
   if (userId) {
@@ -284,45 +313,10 @@ router.get('/edu/sync', asyncHandler(async (req, res) => {
     success: true,
     data: {
       schedule: scheduleData,
-      grades: gradesData
+      grades: gradesData,
+      programSaved,
     }
   });
-}));
-
-// ==================== 培养方案查询 ====================
-
-router.get('/edu/training-program', asyncHandler(async (req, res) => {
-  const { userId } = req.query;
-  if (!userId) throw new AppError('缺少userId参数', 400);
-
-  const db = require('../services/database');
-  const eduProxy = getEduProxy();
-
-  /* 优先从缓存读取 */
-  const cache = db.getTrainingProgramCache(parseInt(userId));
-  if (cache && cache.data) {
-    return res.json({ success: true, data: cache.data, fromCache: true });
-  }
-
-  /* 尝试从后端内存中读取 */
-  if (eduProxy._lastTrainingProgram) {
-    try { db.saveTrainingProgramCache(parseInt(userId), eduProxy._lastTrainingProgram); } catch (e) { /* ignore */ }
-    return res.json({ success: true, data: eduProxy._lastTrainingProgram, fromCache: false });
-  }
-
-  /* 实时获取 */
-  if (!eduProxy.axiosInstance) {
-    throw new AppError('未登录教务系统，请先完成扫码登录', 401);
-  }
-
-  try {
-    const data = await eduProxy.getTrainingProgram();
-    try { db.saveTrainingProgramCache(parseInt(userId), data); } catch (e) { /* ignore */ }
-    res.json({ success: true, data, fromCache: false });
-  } catch (err) {
-    console.error('[EduRoute] 培养方案获取失败:', err.message);
-    throw new AppError('获取培养方案失败: ' + err.message, 500);
-  }
 }));
 
 // ==================== 登出 ====================

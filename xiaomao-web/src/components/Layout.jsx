@@ -21,11 +21,13 @@ import {
   Car,
   Grid2X2,
   X,
+  LayoutDashboard,
 } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
 
 /* 侧边栏完整导航（桌面端10项） */
 const sidebarNavItems = [
+  { path: '/dashboard', label: '首页', icon: LayoutDashboard },
   { path: '/chat', label: 'AI对话', icon: MessageSquare },
   { path: '/campus/map', label: '校园导航', icon: Map },
   { path: '/campus/schedule', label: '课表', icon: Calendar },
@@ -45,7 +47,7 @@ const bottomNavItems = [
   { path: '/chat', label: 'AI对话', icon: MessageSquare },
   { path: '/campus/map', label: '导航', icon: Map },
   { path: '/campus/schedule', label: '课表', icon: Calendar },
-  { path: '/notes', label: '随记', icon: FileText },
+  { path: '/dashboard', label: '首页', icon: LayoutDashboard },
   { path: '/campus/news', label: '资讯', icon: Newspaper },
 ]
 
@@ -62,6 +64,7 @@ const moreNavItems = [
 /* 根据当前路径获取页面标题 */
 function getPageTitle(pathname) {
   const titleMap = {
+    '/dashboard': { title: '首页', subtitle: '校园信息一览' },
     '/chat': { title: 'AI对话', subtitle: '和小贸聊聊天' },
     '/campus': { title: '校园服务', subtitle: '一站式校园生活' },
     '/campus/map': { title: '校园导航', subtitle: '快速找到目的地' },

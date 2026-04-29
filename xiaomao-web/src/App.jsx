@@ -20,13 +20,17 @@ import NotesPage from './components/NotesPage'
 import MoocPage from './components/MoocPage'
 import EmptyRoomsPage from './components/EmptyRoomsPage'
 import ParkPage from './components/ParkPage'
+import DashboardPage from './components/DashboardPage'
 
 function App() {
   return (
     <UserProvider>
       <Routes>
-        {/* 根路径重定向到聊天页面 */}
-        <Route path="/" element={<Navigate to="/chat" replace />} />
+        {/* 根路径重定向到首页看板 */}
+        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+        {/* 首页看板 */}
+        <Route path="/dashboard" element={<Layout><DashboardPage /></Layout>} />
 
         {/* 聊天页面 */}
         <Route path="/chat" element={<Layout><ChatPage /></Layout>} />

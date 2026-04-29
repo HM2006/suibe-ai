@@ -23,6 +23,7 @@ const eduRoutes = require('./routes/edu');
 const userRoutes = require('./routes/user');
 const adminRoutes = require('./routes/admin');
 const notesRoutes = require('./routes/notes');
+const weatherRoutes = require('./routes/weather');
 // const emptyRoomsRoutes = require('./routes/empty-rooms');
 
 // 导入错误处理中间件
@@ -183,6 +184,9 @@ app.use('/api', adminRoutes);
 
 // 空教室路由
 // app.use('/api', emptyRoomsRoutes);
+
+// 天气路由
+app.use('/api', weatherRoutes);
 
 // ==================== SPA 路由回退 ====================
 // 所有非 API 的 GET 请求都返回 index.html，让 React Router 处理前端路由

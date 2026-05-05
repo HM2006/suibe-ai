@@ -303,7 +303,12 @@ router.get('/edu/sync', asyncHandler(async (req, res) => {
         const programName = programData.program?.nameZh || '';
         const programGrade = programData.program?.grade || '';
         if (programName) {
-          const majorStr = programGrade ? `${programGrade}级 ${programName}` : programName;
+          // 去掉"级"重复和"人才培养方案"等后缀
+          let cleanName = programName
+            .replace(/人才培养方案.*$/, '')
+            .replace(/^\d{4}级/, '')
+            .trim();
+          const majorStr = programGrade ? `${programGrade}级 ${cleanName}` : cleanName;
           eduProxy.studentMajor = majorStr;
           console.log(`[EduRoute] 从培养方案获取到专业年级: ${majorStr}`);
         }

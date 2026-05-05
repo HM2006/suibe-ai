@@ -1026,6 +1026,7 @@ select {
   margin: 20px 0 24px;
   overflow-x: auto;
   padding: 0 4px 4px;
+  padding-left: 80px;
 }
 
 .week-btn {
@@ -1723,6 +1724,7 @@ select {
   padding: 24px;
   text-align: center;
   box-shadow: var(--shadow-sm);
+  min-width: 0;
 }
 
 .stat-value {
@@ -1731,6 +1733,9 @@ select {
   color: var(--primary);
   margin-bottom: 4px;
   letter-spacing: var(--ls-tight);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .stat-label {

@@ -46,7 +46,8 @@ function init() {
       last_login TEXT,
       edu_connected INTEGER DEFAULT 0,
       real_name TEXT DEFAULT '',
-      major_grade TEXT DEFAULT ''
+      major_grade TEXT DEFAULT '',
+      edu_last_sync TEXT DEFAULT NULL
     );
   `);
 
@@ -55,6 +56,7 @@ function init() {
     { table: 'users', column: 'avatar TEXT DEFAULT \'\'' },
     { table: 'users', column: 'real_name TEXT DEFAULT \'\'' },
     { table: 'users', column: 'major_grade TEXT DEFAULT \'\'' },
+    { table: 'users', column: 'edu_last_sync TEXT DEFAULT NULL' },
   ];
   for (const { table, column } of migrateColumns) {
     try {
@@ -592,7 +594,7 @@ function getUserCourseNames(userId) {
  * 更新用户真实姓名和专业年级（从教务系统同步）
  */
 function updateUserEduInfo(userId, realName, majorGrade) {
-  const stmt = db.prepare('UPDATE users SET real_name = ?, major_grade = ? WHERE id = ?');
+  const stmt = db.prepare('UPDATE users SET real_name = ?, major_grade = ?, edu_last_sync = datetime("now","localtime") WHERE id = ?');
   return stmt.run(realName, majorGrade, userId);
 }
 

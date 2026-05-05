@@ -28,7 +28,7 @@ import { useUser } from '../contexts/UserContext'
 /* 侧边栏完整导航（桌面端10项） */
 const sidebarNavItems = [
   { path: '/dashboard', label: '首页', icon: LayoutDashboard },
-  { path: '/chat', label: 'AI对话', icon: MessageSquare },
+  { path: '/chat', label: '小贸', icon: MessageSquare },
   { path: '/campus/map', label: '校园导航', icon: Map },
   { path: '/campus/schedule', label: '课表', icon: Calendar },
   { path: '/campus/grades', label: '成绩', icon: BarChart3 },
@@ -44,7 +44,7 @@ const sidebarNavItems = [
 
 /* 底部导航（移动端5项，首页居中） */
 const bottomNavItems = [
-  { path: '/chat', label: 'AI对话', icon: MessageSquare },
+  { path: '/chat', label: '小贸', icon: MessageSquare },
   { path: '/campus/schedule', label: '课表', icon: Calendar },
   { path: '/dashboard', label: '首页', icon: LayoutDashboard },
   { path: '/campus/news', label: '资讯', icon: Newspaper },

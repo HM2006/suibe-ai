@@ -5,7 +5,7 @@
    ======================================== */
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Clock, MapPin, User, Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Clock, MapPin, User, Calendar } from 'lucide-react'
 import { useUser } from '../contexts/UserContext'
 import { API } from '../config/api'
 
@@ -379,15 +379,13 @@ function SchedulePage() {
             onClick={() => setSelectedWeek(w => Math.max(1, w - 1))}
             disabled={selectedWeek <= 1}
             style={{
-              width: '32px', height: '32px', borderRadius: '8px',
-              border: '1px solid var(--card-border)', background: 'var(--card-bg)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: selectedWeek <= 1 ? 'not-allowed' : 'pointer',
-              opacity: selectedWeek <= 1 ? 0.4 : 1,
-              color: 'var(--text-primary)',
+              background: 'none', border: 'none',
+              color: selectedWeek <= 1 ? 'var(--text-muted)' : 'var(--primary)',
+              fontSize: '13px', cursor: selectedWeek <= 1 ? 'not-allowed' : 'pointer',
+              opacity: selectedWeek <= 1 ? 0.4 : 1, padding: '4px 0',
             }}
           >
-            <ChevronLeft size={16} />
+            上一周
           </button>
 
           <div style={{ textAlign: 'center' }}>
@@ -409,15 +407,13 @@ function SchedulePage() {
             onClick={() => setSelectedWeek(w => Math.min(maxWeek, w + 1))}
             disabled={selectedWeek >= maxWeek}
             style={{
-              width: '32px', height: '32px', borderRadius: '8px',
-              border: '1px solid var(--card-border)', background: 'var(--card-bg)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: selectedWeek >= maxWeek ? 'not-allowed' : 'pointer',
-              opacity: selectedWeek >= maxWeek ? 0.4 : 1,
-              color: 'var(--text-primary)',
+              background: 'none', border: 'none',
+              color: selectedWeek >= maxWeek ? 'var(--text-muted)' : 'var(--primary)',
+              fontSize: '13px', cursor: selectedWeek >= maxWeek ? 'not-allowed' : 'pointer',
+              opacity: selectedWeek >= maxWeek ? 0.4 : 1, padding: '4px 0',
             }}
           >
-            <ChevronRight size={16} />
+            下一周
           </button>
         </div>
 

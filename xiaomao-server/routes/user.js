@@ -175,6 +175,7 @@ router.get('/user/profile', authMiddleware, (req, res) => {
         created_at: user.created_at,
         last_login: user.last_login,
         edu_connected: user.edu_connected,
+        edu_last_sync: user.edu_last_sync || '',
       },
       scheduleCache: scheduleCache ? {
         data: scheduleCache.data,

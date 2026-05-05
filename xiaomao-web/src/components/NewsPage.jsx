@@ -11,7 +11,6 @@ import {
   X,
   Clock,
   User,
-  RefreshCw,
   ExternalLink,
   Paperclip,
 } from 'lucide-react'
@@ -109,15 +108,12 @@ function NewsPage() {
   const [isLoading, setIsLoading] = useState(true)
   /* 数据来源标识 */
   const [dataSource, setDataSource] = useState('mock')
-  /* 刷新按钮旋转状态 */
-  const [isRefreshing, setIsRefreshing] = useState(false)
   /* 同步时间 */
   const [lastSyncTime, setLastSyncTime] = useState(null)
 
   /* 获取实时新闻 */
-  const fetchNews = useCallback(async (showLoading = true) => {
-    if (showLoading) setIsLoading(true)
-    setIsRefreshing(true)
+  const fetchNews = useCallback(async () => {
+    setIsLoading(true)
     try {
       const res = await fetch(`${API.campus}/news`)
       const data = await res.json()
@@ -143,7 +139,6 @@ function NewsPage() {
       console.error('获取实时新闻失败，使用模拟数据:', err)
     } finally {
       setIsLoading(false)
-      setIsRefreshing(false)
     }
   }, [])
 

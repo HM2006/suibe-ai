@@ -754,7 +754,7 @@ function UserProfile() {
                 {eduSyncing ? '正在同步课表、成绩和培养方案数据...' :
                  eduSyncStatus === 'success' ? '数据已同步到本地缓存' :
                  eduSyncStatus === 'error' ? '同步失败，请重试' :
-                 user.eduConnected ? '数据已同步 · 点击可重新获取最新数据' : '未连接 · 点击登录教务系统获取数据'}
+                 user.eduConnected ? (user.edu_last_sync ? `上次同步于 ${user.edu_last_sync}` : '数据已同步') : '未连接 · 点击登录教务系统获取数据'}
               </div>
             </div>
             {eduSyncing && <Loader size={16} style={{ color: 'var(--primary)', animation: 'spin 1s linear infinite' }} />}

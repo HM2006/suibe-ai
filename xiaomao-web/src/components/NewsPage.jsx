@@ -111,6 +111,8 @@ function NewsPage() {
   const [dataSource, setDataSource] = useState('mock')
   /* 刷新按钮旋转状态 */
   const [isRefreshing, setIsRefreshing] = useState(false)
+  /* 同步时间 */
+  const [lastSyncTime, setLastSyncTime] = useState(null)
 
   /* 获取实时新闻 */
   const fetchNews = useCallback(async (showLoading = true) => {
@@ -135,6 +137,7 @@ function NewsPage() {
         }))
         setNewsList(transformed)
         setDataSource('live')
+        setLastSyncTime(new Date())
       }
     } catch (err) {
       console.error('获取实时新闻失败，使用模拟数据:', err)
@@ -203,17 +206,8 @@ function NewsPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           {/* 数据来源标识 */}
           <span className={`data-source-tag ${dataSource === 'live' ? 'live' : 'mock'}`}>
-            {dataSource === 'live' ? '实时同步' : '模拟数据'}
+            {dataSource === 'live' && lastSyncTime ? `同步于 ${lastSyncTime.getHours()}:${String(lastSyncTime.getMinutes()).padStart(2, '0')}` : '模拟数据'}
           </span>
-          {/* 刷新按钮 */}
-          <button
-            className={`refresh-btn ${isRefreshing ? 'spinning' : ''}`}
-            onClick={() => fetchNews(false)}
-            disabled={isRefreshing}
-          >
-            <RefreshCw size={12} />
-            刷新
-          </button>
         </div>
       </div>
 

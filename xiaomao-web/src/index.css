@@ -2455,7 +2455,8 @@ select {
   }
 
   .schedule-table {
-    display: none;
+    display: block;
+    overflow-x: auto;
   }
 
   .schedule-overview {

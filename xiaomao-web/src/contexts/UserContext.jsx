@@ -42,6 +42,8 @@ export function UserProvider({ children }) {
         const enrichedUser = {
           ...profileUser,
           eduConnected: profileUser.edu_connected || profileUser.eduConnected || 0,
+          edu_name: profileUser.real_name || profileUser.edu_name || '',
+          edu_major_grade: profileUser.major_grade || profileUser.edu_major_grade || '',
         }
         setUser(enrichedUser)
         return data.data

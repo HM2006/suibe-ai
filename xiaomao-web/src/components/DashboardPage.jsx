@@ -135,6 +135,13 @@ function DashboardPage() {
             if (Array.isArray(dayCourses)) todayCourses = dayCourses
           }
           setSchedule(todayCourses)
+          // 按当前教学周过滤
+          const currentWeek = Math.floor((Date.now() - new Date(2026, 2, 2).getTime()) / (7 * 24 * 60 * 60 * 1000)) + 1
+          const weekFiltered = todayCourses.filter(c => {
+            if (!c.weekIndexes || c.weekIndexes.length === 0) return true
+            return c.weekIndexes.includes(currentWeek)
+          })
+          setSchedule(weekFiltered)
         }
       } catch (err) {
         console.error('获取今日课程失败:', err)

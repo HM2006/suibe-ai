@@ -365,23 +365,6 @@ function SchedulePage() {
       {/* 有数据时显示课表 */}
       {realSchedule && (<>
 
-      {/* 校历信息栏 */}
-      <div className="schedule-semester-info">
-        <div className="schedule-semester-label">
-          <Calendar size={14} />
-          <span>2025-2026学年 第二学期</span>
-        </div>
-        <div className="schedule-semester-dates">
-          {getWeekDateRange(selectedWeek)}
-        </div>
-        <div className={`schedule-semester-week-badge ${selectedWeek === getCurrentWeek() ? 'current' : ''}`}>
-          第{selectedWeek}周
-          {selectedWeek === getCurrentWeek() && selectedWeek > 0 && selectedWeek <= TOTAL_WEEKS && (
-            <span className="schedule-current-tag">本周</span>
-          )}
-        </div>
-      </div>
-
       {/* ====== 周选择器 ====== */}
       <div style={{
         background: 'var(--card-bg)',
@@ -408,11 +391,17 @@ function SchedulePage() {
           </button>
 
           <div style={{ textAlign: 'center' }}>
-            <div style={{ fontSize: '18px', fontWeight: 700, color: 'var(--text-primary)' }}>
-              第 {selectedWeek} 教学周
+            <div style={{ fontSize: '16px', fontWeight: 700, color: 'var(--text-primary)' }}>
+              2025-2026学年 第二学期
+            </div>
+            <div style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '2px' }}>
+              第{selectedWeek}教学周 · {getWeekDateRange(selectedWeek)}
+              {selectedWeek === getCurrentWeek() && selectedWeek > 0 && selectedWeek <= TOTAL_WEEKS && (
+                <span style={{ marginLeft: '6px', color: 'var(--primary)', fontWeight: 600 }}>本周</span>
+              )}
             </div>
             <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '2px' }}>
-              本周共 {weekCourseCount} 节课
+              共 {weekCourseCount} 节课
             </div>
           </div>
 

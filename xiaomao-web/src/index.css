@@ -1057,15 +1057,16 @@ select {
 .schedule-table {
   background: var(--surface-container-lowest);
   border-radius: var(--radius-lg);
-  overflow: hidden;
+  overflow-x: auto;
   box-shadow: var(--shadow-sm);
 }
 
 .schedule-table-header {
   display: grid;
-  grid-template-columns: 80px repeat(7, 1fr);
+  grid-template-columns: 80px repeat(7, minmax(90px, 1fr));
   background: var(--surface-container-low);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  min-width: 710px;
 }
 
 .schedule-table-header .header-cell {
@@ -1078,7 +1079,8 @@ select {
 
 .schedule-table-body {
   display: grid;
-  grid-template-columns: 80px repeat(7, 1fr);
+  grid-template-columns: 80px repeat(7, minmax(90px, 1fr));
+  min-width: 710px;
 }
 
 .time-cell {

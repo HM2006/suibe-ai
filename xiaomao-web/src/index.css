@@ -1026,7 +1026,6 @@ select {
   margin: 20px 0 24px;
   overflow-x: auto;
   padding: 0 4px 4px;
-  padding-left: 80px;
 }
 
 .week-btn {
@@ -1066,6 +1065,7 @@ select {
   display: grid;
   grid-template-columns: 80px repeat(7, 1fr);
   background: var(--surface-container-low);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
 
 .schedule-table-header .header-cell {

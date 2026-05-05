@@ -659,6 +659,17 @@ select {
   justify-content: center;
   margin-top: 28px;
   max-width: 520px;
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-normal);
+}
+
+/* 有内容时的毛玻璃效果 */
+.quick-actions.has-content {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
 }
 
 .quick-action-btn {
@@ -3615,12 +3626,10 @@ textarea:focus-visible {
   left: 0;
   right: 0;
   padding: 12px 16px 16px;
-  background: var(--surface-container-lowest);
+  background: transparent;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.06);
-  border-top: 1px solid var(--outline-variant);
   z-index: 20;
 }
 

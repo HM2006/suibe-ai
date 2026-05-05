@@ -372,8 +372,8 @@ function ChatPage() {
         isTyping = true
 
         while (pendingContent.length > 0) {
-          // 每次显示 1-2 个字符，模拟打字效果（放慢20%）
-          const batchSize = Math.floor(Math.random() * 2) + 1
+          // 每次显示 2-3 个字符，模拟打字效果
+          const batchSize = Math.floor(Math.random() * 2) + 2
           const charsToShow = pendingContent.slice(0, batchSize)
           pendingContent = pendingContent.slice(batchSize)
           fullContent += charsToShow
@@ -384,8 +384,8 @@ function ChatPage() {
             )
           )
 
-          // 打字间隔 18-36ms（放慢20%，原来是15-30ms）
-          await new Promise(r => setTimeout(r, Math.floor(Math.random() * 18) + 18))
+          // 打字间隔 15-30ms
+          await new Promise(r => setTimeout(r, Math.floor(Math.random() * 15) + 15))
         }
 
         isTyping = false
@@ -689,19 +689,6 @@ function ChatPage() {
             <h2 className="welcome-title">你好，我是小贸</h2>
             <p className="welcome-desc">集成校园知识库的AI助手，为你解答教务政策、奖学金等各类问题</p>
 
-            <div className="quick-actions">
-              {quickActions.map((action) => (
-                <button
-                  key={action.label}
-                  className="quick-action-btn"
-                  onClick={() => handleQuickAction(action)}
-                >
-                  <action.icon className="btn-icon" />
-                  <span>{action.label}</span>
-                </button>
-              ))}
-            </div>
-
             <div className="message assistant" style={{ alignSelf: 'center', maxWidth: '600px', marginTop: '24px' }}>
               <div className="message-avatar">
                 <Sparkles size={16} />
@@ -768,6 +755,19 @@ function ChatPage() {
             ))}
           </div>
         )}
+        <div className={`quick-actions ${messages.length > 0 ? 'has-content' : ''}`}>
+          {quickActions.map((action) => (
+            <button
+              key={action.label}
+              className="quick-action-btn"
+              onClick={() => handleQuickAction(action)}
+              disabled={isLoading}
+            >
+              <action.icon className="btn-icon" />
+              <span>{action.label}</span>
+            </button>
+          ))}
+        </div>
         <div className="chat-input-capsule">
           <textarea
             ref={inputRef}

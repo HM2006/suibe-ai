@@ -361,6 +361,45 @@ function ChatPage() {
       let buffer = ''
       let firstChunkReceived = false
 
+      const processSSELine = (line) => {
+        const trimmed = line.trim()
+        if (!trimmed || trimmed.startsWith('event:')) return
+
+        if (trimmed.startsWith('data:')) {
+          const dataStr = trimmed.slice(5).trim()
+          if (!dataStr || dataStr === '[DONE]') return
+
+          try {
+            const parsed = JSON.parse(dataStr)
+            if (parsed.status === 'connected') return
+            const content = parsed.answer || parsed.content || ''
+            if (content) {
+              if (!firstChunkReceived) {
+                firstChunkReceived = true
+                stopLoadingAnimation()
+              }
+              fullContent += content
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === aiMessageId ? { ...msg, content: fullContent } : msg
+                )
+              )
+            }
+          } catch {
+            if (!firstChunkReceived) {
+              firstChunkReceived = true
+              stopLoadingAnimation()
+            }
+            fullContent += dataStr
+            setMessages((prev) =>
+              prev.map((msg) =>
+                msg.id === aiMessageId ? { ...msg, content: fullContent } : msg
+              )
+            )
+          }
+        }
+      }
+
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
@@ -370,50 +409,12 @@ function ChatPage() {
         buffer = lines.pop() || ''
 
         for (const line of lines) {
-          const trimmed = line.trim()
-          if (!trimmed) continue
-
-          if (trimmed.startsWith('event: done')) {
-            continue
-          }
-
-          if (trimmed.startsWith('data: ')) {
-            const dataStr = trimmed.slice(6)
-            if (dataStr === '[DONE]') continue
-            try {
-              const parsed = JSON.parse(dataStr)
-              if (parsed.status === 'connected') continue
-              const content = parsed.answer || parsed.content || ''
-              if (content) {
-                if (!firstChunkReceived) {
-                  firstChunkReceived = true
-                  stopLoadingAnimation()
-                }
-                fullContent += content
-                setMessages((prev) =>
-                  prev.map((msg) =>
-                    msg.id === aiMessageId
-                      ? { ...msg, content: fullContent }
-                      : msg
-                  )
-                )
-              }
-            } catch {
-               if (!firstChunkReceived) {
-                 firstChunkReceived = true
-                 stopLoadingAnimation()
-               }
-              fullContent += dataStr
-              setMessages((prev) =>
-                prev.map((msg) =>
-                  msg.id === aiMessageId
-                    ? { ...msg, content: fullContent }
-                    : msg
-                )
-              )
-            }
-          }
+          processSSELine(line)
         }
+      }
+
+      if (buffer.trim()) {
+        processSSELine(buffer)
       }
 
       if (!fullContent) {

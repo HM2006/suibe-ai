@@ -293,25 +293,24 @@ router.get('/edu/sync', asyncHandler(async (req, res) => {
       programSaved = true;
       console.log(`[EduRoute] 培养方案完成情况数据已获取并缓存，模块数: ${programData.modules?.length || 0}`);
 
-      /* 从培养方案中提取学生姓名和专业（比成绩API更可靠） */
+      /* 从培养方案中提取学生姓名和专业（比课表HTML正则更可靠，始终覆盖） */
       const studentInfo = eduProxy.getStudentInfo();
-      if (!studentInfo.studentName && programData.student?.name) {
+      if (programData.student?.name) {
         eduProxy.studentName = programData.student.name;
         console.log(`[EduRoute] 从培养方案获取到学生姓名: ${programData.student.name}`);
       }
-      if (!studentInfo.studentMajor) {
-        const programName = programData.program?.nameZh || '';
-        const programGrade = programData.program?.grade || '';
-        if (programName) {
-          // 去掉"级"重复和"人才培养方案"等后缀
-          let cleanName = programName
-            .replace(/人才培养方案.*$/, '')
-            .replace(/^\d{4}级/, '')
-            .trim();
-          const majorStr = programGrade ? `${programGrade}级 ${cleanName}` : cleanName;
-          eduProxy.studentMajor = majorStr;
-          console.log(`[EduRoute] 从培养方案获取到专业年级: ${majorStr}`);
-        }
+      const programName = programData.program?.nameZh || '';
+      const programGrade = programData.program?.grade || '';
+      if (programName) {
+        // 清理：去掉"人才培养方案"等后缀、括号内容、重复年级
+        let cleanName = programName
+          .replace(/人才培养方案.*$/, '')
+          .replace(/（.*?）$/, '')
+          .replace(/^\d{4}级/, '')
+          .trim();
+        const majorStr = programGrade ? `${programGrade}级 ${cleanName}` : cleanName;
+        eduProxy.studentMajor = majorStr;
+        console.log(`[EduRoute] 从培养方案获取到专业年级: ${majorStr}`);
       }
     }
   } catch (programErr) {

@@ -850,7 +850,12 @@ class EduProxy {
           for (const pattern of majorPatterns) {
             const match = ctHtml.match(pattern);
             if (match) {
-              this.studentMajor = match[1].trim();
+              let raw = match[1].trim();
+              // 清理：去掉"人才培养方案"等后缀和重复的年级前缀
+              raw = raw.replace(/人才培养方案.*$/, '').replace(/（.*?）$/, '').trim();
+              // 去掉开头的重复年级（如 "2024级 2024级"）
+              raw = raw.replace(/^(20\d{2}级)\s*\1/, '$1');
+              this.studentMajor = raw;
               break;
             }
           }

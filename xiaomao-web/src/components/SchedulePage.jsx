@@ -299,7 +299,6 @@ function SchedulePage() {
   }, [scheduleData])
 
   /* 快捷周选择按钮 */
-  const quickWeeks = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 
   return (
     <div className="schedule-container">
@@ -417,28 +416,6 @@ function SchedulePage() {
           </button>
         </div>
 
-        {/* 快捷周选择 */}
-        <div style={{
-          display: 'flex', flexWrap: 'wrap', gap: '4px',
-        }}>
-          {quickWeeks.filter(w => w <= maxWeek).map(w => (
-            <button
-              key={w}
-              onClick={() => setSelectedWeek(w)}
-              style={{
-                minWidth: '32px', height: '26px', borderRadius: '6px',
-                border: selectedWeek === w ? 'none' : '1px solid var(--card-border)',
-                background: selectedWeek === w ? 'var(--primary)' : 'transparent',
-                color: selectedWeek === w ? '#fff' : 'var(--text-secondary)',
-                fontSize: '12px', fontWeight: selectedWeek === w ? 600 : 400,
-                cursor: 'pointer', padding: '0 6px',
-                transition: 'all 0.15s',
-              }}
-            >
-              {w}
-            </button>
-          ))}
-        </div>
       </div>
 
       {/* ====== 星期选择器 ====== */}

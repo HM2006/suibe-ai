@@ -1064,7 +1064,7 @@ select {
 
 .schedule-table-header {
   display: grid;
-  grid-template-columns: 80px repeat(7, minmax(72px, 1fr));
+  grid-template-columns: 80px repeat(7, 72px);
   background: var(--surface-container-low);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   min-width: 584px;
@@ -1080,7 +1080,7 @@ select {
 
 .schedule-table-body {
   display: grid;
-  grid-template-columns: 80px repeat(7, minmax(72px, 1fr));
+  grid-template-columns: 80px repeat(7, 72px);
   min-width: 584px;
 }
 

@@ -659,17 +659,6 @@ select {
   justify-content: center;
   margin-top: 28px;
   max-width: 520px;
-  padding: 12px 16px;
-  border-radius: var(--radius-lg);
-  transition: all var(--transition-normal);
-}
-
-/* 有内容时的毛玻璃效果 */
-.quick-actions.has-content {
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
 }
 
 .quick-action-btn {
@@ -3714,6 +3703,40 @@ textarea:focus-visible {
   justify-content: center;
   padding: 0 4px;
   animation: slideUp 0.4s ease;
+}
+
+/* 内联预制问题按钮 */
+.preset-questions-inline {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.preset-question-text-btn {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  background: var(--surface-container-lowest);
+  border: 1px solid rgba(196, 198, 208, 0.2);
+  border-radius: var(--radius-md);
+  color: var(--primary);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  line-height: 1.5;
+}
+
+.preset-question-text-btn:hover {
+  background: var(--surface-container-low);
+  border-color: var(--primary);
+  transform: translateX(4px);
+}
+
+.preset-question-text-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .preset-question-chip {

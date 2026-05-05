@@ -159,16 +159,13 @@ const getLocalResponses = (token) => ({
 })
 
 /* 欢迎消息 */
-const welcomeMessage = `你好！我是**小贸**，你的校园知识库助手 🎓
+const getWelcomeMessage = (presets) => `你好！我是**小贸**，你的校园助手 🎓
 
-我可以帮你：
-- 📋 **教务处政策文件** - 转专业、休学、选课等教务政策查询
-- 🏅 **奖学金加分** - 奖学金评定标准、加分细则查询
-- 📝 **第二课堂** - 第二课堂学分要求和活动加分
-- 📅 **课表成绩** - 查看课表和成绩信息
-- 📰 **校园资讯** - 获取最新校园动态
+我可以帮你查询各类学校政策文件（如选课、培养方案、奖学金、成绩管理等），也可以回答任何你感兴趣的其他问题。
 
-有什么我可以帮你的吗？`
+不如试试问我：
+• ${presets[0]?.question || '我们学校本科生奖学金的金额和人数比例分别是多少？'}
+• ${presets[1]?.question || '我们学校英语A班、B班有什么区别？'}`
 
 /* 加载状态阶段 */
 const LOADING_STAGES = [
@@ -689,6 +686,19 @@ function ChatPage() {
             <h2 className="welcome-title">你好，我是小贸</h2>
             <p className="welcome-desc">集成校园知识库的AI助手，为你解答教务政策、奖学金等各类问题</p>
 
+            <div className="quick-actions">
+              {quickActions.map((action) => (
+                <button
+                  key={action.label}
+                  className="quick-action-btn"
+                  onClick={() => handleQuickAction(action)}
+                >
+                  <action.icon className="btn-icon" />
+                  <span>{action.label}</span>
+                </button>
+              ))}
+            </div>
+
             <div className="message assistant" style={{ alignSelf: 'center', maxWidth: '600px', marginTop: '24px' }}>
               <div className="message-avatar">
                 <Sparkles size={16} />
@@ -696,8 +706,24 @@ function ChatPage() {
               <div className="message-bubble">
                 <div className="markdown-content">
                   <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]}>
-                    {welcomeMessage}
+                    {`你好！我是**小贸**，你的校园助手 🎓
+
+我可以帮你查询各类学校政策文件（如选课、培养方案、奖学金、成绩管理等），也可以回答任何你感兴趣的其他问题。
+
+不如试试问我：`}
                   </ReactMarkdown>
+                  <div className="preset-questions-inline">
+                    {presetQuestions.map((preset, index) => (
+                      <button
+                        key={index}
+                        className="preset-question-text-btn"
+                        onClick={() => handlePresetQuestion(preset)}
+                        disabled={isLoading}
+                      >
+                        {preset.question}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -741,33 +767,6 @@ function ChatPage() {
       </div>
 
       <div className="chat-input-area">
-        {messages.length === 0 && (
-          <div className="preset-questions">
-            {presetQuestions.map((preset, index) => (
-              <button
-                key={index}
-                className="preset-question-chip"
-                onClick={() => handlePresetQuestion(preset)}
-                disabled={isLoading}
-              >
-                {preset.question}
-              </button>
-            ))}
-          </div>
-        )}
-        <div className={`quick-actions ${messages.length > 0 ? 'has-content' : ''}`}>
-          {quickActions.map((action) => (
-            <button
-              key={action.label}
-              className="quick-action-btn"
-              onClick={() => handleQuickAction(action)}
-              disabled={isLoading}
-            >
-              <action.icon className="btn-icon" />
-              <span>{action.label}</span>
-            </button>
-          ))}
-        </div>
         <div className="chat-input-capsule">
           <textarea
             ref={inputRef}
